@@ -24,6 +24,11 @@ bitable-preview.html
 # 出图产物 + 中间 prompt（提示词本体 assets/prompts.json 是要提交的）
 assets/generated/
 
+# 渲染 SVG 用的临时预览 / Edge 临时 profile
+_preview/
+_pr_*/
+_edgeprof*/
+
 # 编辑器 / 系统
 .vscode/
 .idea/

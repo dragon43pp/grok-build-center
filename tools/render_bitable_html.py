@@ -61,7 +61,7 @@ def main() -> int:
 
     doc = f"""<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="utf-8">
-<title>AI 会话中心 · 本地预览</title>
+<title>Grok Build Pager · 本地预览</title>
 <style>
   body{{font:13px/1.6 -apple-system,"Segoe UI",system-ui,sans-serif;margin:0;padding:24px;
        background:#f7f7f5;color:#2c2c2a}}
@@ -77,7 +77,7 @@ def main() -> int:
   tr:hover td{{background:#faf9f6}}
   code{{font-family:ui-monospace,Consolas,monospace;font-size:11px;color:#444441}}
 </style></head><body>
-<h1>AI 会话中心 · 本地预览</h1>
+<h1>Grok Build Pager · 本地预览</h1>
 <div class="meta">共 <b>{len(rows)}</b> 场会话 ·
   按状态 {html.escape(str(by_status))} · 按 CLI {html.escape(str(by_cli))}</div>
 {link}

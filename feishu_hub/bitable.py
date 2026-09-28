@@ -395,7 +395,7 @@ class BitableSync:
 
 # ------------------------------------------------------------------ 建 Base
 
-def create_base(client: lark.Client, name: str = "AI 会话中心") -> tuple[str, str]:
+def create_base(client: lark.Client, name: str = "Grok Build Pager") -> tuple[str, str]:
     """新建一个多维表格，返回 (app_token, url)。
 
     注意 body 是 `ReqApp`，不是 `CreateAppRequestBody` —— 这个模型类不存在。

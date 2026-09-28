@@ -307,12 +307,12 @@ def build(out_path: str) -> str:
     doc = f"""<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>AI 会话中心 · 飞书卡片预览</title>
+<title>Grok Build Pager · 飞书卡片预览</title>
 <style>{CSS}</style></head>
 <body><div class="wrap">
 
 <div class="left">
-  <h1>AI 会话中心 · 飞书卡片预览</h1>
+  <h1>Grok Build Pager · 飞书卡片预览</h1>
   <p class="lede">右侧是 <code>cards.build_panel()</code> 真实输出的渲染，按钮可以点。</p>
 
   <div class="warn">
@@ -343,7 +343,7 @@ def build(out_path: str) -> str:
 <div class="right">
   <div class="phone">
     <div class="phone-bar">
-      <span>AI 会话中心</span>
+      <span>Grok Build Pager</span>
       <span>筛选 <b id="nowfilter">active</b> · 第 <b id="nowpage">0</b> 页</span>
     </div>
     <div id="screen"></div>

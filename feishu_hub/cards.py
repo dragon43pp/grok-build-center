@@ -188,7 +188,7 @@ def build_panel(snap: Snapshot, filter_key: str = "active", page: int = 0,
         "config": {"update_multi": True},
         "header": {
             "template": "blue",
-            "title": {"tag": "plain_text", "content": "AI 会话中心"},
+            "title": {"tag": "plain_text", "content": "Grok Build Pager"},
             "subtitle": {"tag": "plain_text", "content": f"{snap.total} 场会话 · 点「打开」回到现场"},
         },
         "body": {"elements": elements},

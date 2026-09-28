@@ -72,7 +72,7 @@ def localhost_opener() -> urllib.request.OpenerDirector:
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="向 AI 会话中心上报一条 hook 事件")
+    ap = argparse.ArgumentParser(description="向 Grok Build Pager上报一条 hook 事件")
     ap.add_argument("--cli", default="")
     ap.add_argument("--status", default="needs-you",
                     choices=["needs-you", "error", "running", "done", "idle"])

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-把 agent-hub 装进开始菜单。
+把 Grok Build Pager 装进开始菜单。
 
 **只有一个入口**，不放一排图标让人挑 —— 用户点开就该直接干活，
 「该走哪条路」是 `start.cmd` + `tools/config_ready.py` 自己判断的事：
@@ -24,35 +24,39 @@ from make_lnk import make_shortcut  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MENU = os.path.expandvars(r"%APPDATA%\Microsoft\Windows\Start Menu\Programs")
-LNK = os.path.join(MENU, "HRack 会话中心.lnk")
-# 用 HRack 自己的图标，一眼看得出这俩是一套
-ICON = r"D:\hrack桌面版\resources\tray\hrack.ico"
+LNK = os.path.join(MENU, "Grok Build Pager.lnk")
 
-NAME = "HRack 会话中心"
+# 自己的图标，不借别人的 —— tools/make_icon.py 生成
+ICON = os.path.join(ROOT, "assets", "icon", "pager.ico")
+
+# 老版本用过这两个名字，卸载时一并清掉，避免开始菜单里留孤儿
+LEGACY_NAMES = ("Grok Build Pager", "HRack 会话中心", "SessionDeck", "AI 会话中心")
+
 TARGET = os.path.join(ROOT, "start.cmd")
-DESC = "看本机会话状态 / 从手机上接着干（没配飞书时自动走离线体检）"
+DESC = "看本机 Grok Build 会话状态 / 卡住了在手机上放行（没配飞书时自动走离线体检）"
 
 
 def main() -> int:
     if "--remove" in sys.argv:
-        # 老版本建过一整个文件夹（①②③④⑤ 五个入口），卸载时要连它一起清掉，
-        # 不然重装之后开始菜单里会同时出现一个文件夹和一个同名快捷方式。
-        legacy = os.path.join(MENU, "HRack 会话中心")
         removed = False
-        if os.path.isdir(legacy):
-            shutil.rmtree(legacy)
-            print(f"[ok] 已删除旧文件夹 {legacy}")
-            removed = True
-        if os.path.exists(LNK):
-            os.remove(LNK)
-            print(f"[ok] 已删除 {LNK}")
-            removed = True
+        for name in LEGACY_NAMES:
+            legacy = os.path.join(MENU, name)
+            if os.path.isdir(legacy):
+                shutil.rmtree(legacy)
+                print(f"[ok] 已删除旧文件夹 {legacy}")
+                removed = True
+            old_lnk = os.path.join(MENU, f"{name}.lnk")
+            if os.path.exists(old_lnk):
+                os.remove(old_lnk)
+                print(f"[ok] 已删除 {old_lnk}")
+                removed = True
         if not removed:
             print(f"[.] 本来就没有 {LNK}")
         return 0
 
     if not os.path.exists(ICON):
-        print(f"[warn] 图标不存在，改用默认图标: {ICON}")
+        print(f"[warn] 图标不存在，先跑 python tools/make_icon.py")
+        print(f"[warn] 改用默认图标: {ICON}")
         icon = ""
     else:
         icon = ICON

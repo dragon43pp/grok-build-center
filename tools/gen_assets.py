@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""用 chutu2 (gpt-image-2) 批量生成 SessionDeck 的视觉资产。
+"""用 chutu2 (gpt-image-2) 批量生成 Grok Build Pager 的视觉资产。
 
 前置条件：l0veyou.com 已登录（桌面有 chutu2-login 快捷方式，双击登录一次即可）。
 没登录时脚本会直接告诉你，不会假装成功。
@@ -52,7 +52,7 @@ def main(argv):
     os.makedirs(OUTDIR, exist_ok=True)
 
     print("=" * 60)
-    print("SessionDeck 视觉资产 · gpt-image-2")
+    print("Grok Build Pager 视觉资产 · gpt-image-2")
     print("输出目录: %s" % OUTDIR)
     print("=" * 60)
 
