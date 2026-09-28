@@ -31,9 +31,9 @@ LNK = os.path.join(MENU, "Grok Build Center.lnk")
 ICON = os.path.join(ROOT, "assets", "icon", "center.ico")
 
 # 历史名字。卸的时候一并清掉，避免开始菜单里留孤儿。
-# **只放不再使用的旧名** —— 当前名字由 LNK 自己负责，别混进来（否则改名时会删错）。
-# 这几个名字都真实用过，别删：老用户的机器上可能还躺着。
-LEGACY_NAMES = ("Grok Build Pager", "SessionDeck", "AI 会话中心", "HRack 会话中心")
+# **只放本项目不再使用的旧名** —— 当前名字由 LNK 自己负责，别混进来
+# （否则改名时会删错）。别的软件的入口不归我们管，不要放进来删。
+LEGACY_NAMES = ("Grok Build Pager", "SessionDeck", "AI 会话中心")
 
 TARGET = os.path.join(ROOT, "start.cmd")
 DESC = "Grok Build 会话管理中心 / 卡住了在手机上放行（没配飞书时自动走离线体检）"

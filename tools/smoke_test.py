@@ -306,7 +306,7 @@ def test_hook_server() -> None:
 
     t0 = time.time()
     code, body = post({"cli": "grok", "sid": "smoke-1", "status": "needs-you",
-                       "note": "要不要删这个文件", "cwd": "D:\\HRack"})
+                       "note": "要不要删这个文件", "cwd": "D:\\proj"})
     elapsed = time.time() - t0
     check("POST /hook 返回 200", code == 200, str(code))
     check("返回 ok", body.get("ok") is True, str(body))
@@ -326,7 +326,7 @@ def test_hook_server() -> None:
         check("状态是 needs-you", hit[0].status == "needs-you", hit[0].status)
         check("备注带上了", hit[0].hook_note == "要不要删这个文件", hit[0].hook_note)
         check("合成行也能恢复（CLI 自己认得这个 id）", hit[0].resumable is True)
-        check("合成行带上了 cwd", hit[0].cwd == "D:\\HRack", hit[0].cwd)
+        check("合成行带上了 cwd", hit[0].cwd == "D:\\proj", hit[0].cwd)
     check("needs-you 排在最前", snap.sessions[0].status == "needs-you", snap.sessions[0].status)
     check("后台把面板 PATCH 了", wait_for(lambda: len(fake.patched) > 0, 5),
           str(len(fake.patched)))
@@ -350,7 +350,7 @@ def test_hook_server() -> None:
     att = [s for s in fake.sent if "等你" in json.dumps(s["card"], ensure_ascii=False)]
     check("推了「有会话在等你」", len(att) == 1, f"att={len(att)}")
     post({"cli": "grok", "sid": "smoke-1", "status": "needs-you",
-          "note": "又来一次", "cwd": "D:\\HRack"})
+          "note": "又来一次", "cwd": "D:\\proj"})
     time.sleep(1.5)
     att = [s for s in fake.sent if "等你" in json.dumps(s["card"], ensure_ascii=False)]
     check("5 分钟内同一会话不重复推", len(att) == 1, f"att={len(att)}")
@@ -813,19 +813,19 @@ def test_bitable_sync() -> None:
               str(bt.STATUS_OPTION_OF.get(key)))
 
 
-def test_hrack_channel() -> None:
-    """HRack 通道：事件流水状态机 + 快照合并 + 卡片按钮。
+def test_feed_channel() -> None:
+    """外部事件流通道：事件流水状态机 + 快照合并 + 卡片按钮。
 
-    这块的价值在于 `blocked` —— HRack 已经在记「哪场在等你确认」了，
+    这块的价值在于 `blocked` —— 对端已经在记「哪场在等你确认」了，
     不接它就是白扔。用一个临时 events.jsonl 把六种 kind 全过一遍。
     """
     import json as _json
 
-    from feishu_hub import hrack as hr
+    from feishu_hub import feed as fd
     from feishu_hub import state as st_mod
 
-    print("\n[25] HRack 事件流水：六种 kind 都要认")
-    tmp = tempfile.mkdtemp(prefix="hrack-")
+    print("\n[25] 事件流水：六种 kind 都要认")
+    tmp = tempfile.mkdtemp(prefix="feed-")
     log = os.path.join(tmp, "events.jsonl")
     base = int(time.time() * 1000) - 60_000
 
@@ -842,7 +842,7 @@ def test_hrack_channel() -> None:
         fh.write(line("tool_call", "grok", "", "grep", base + 1000) + "\n")
         fh.write(line("blocked", "grok", "", "要删 3 个文件，确认？", base + 2000) + "\n")
 
-    w = hr.EventWatcher(log)
+    w = fd.EventWatcher(log)
     w.poll()
     runs = w.runs
     check("认出一场会话", len(runs) == 1, str(len(runs)))
@@ -873,7 +873,7 @@ def test_hrack_channel() -> None:
           any(r.cli == "kimi" for r in w.runs.values()),
           str([r.cli for r in w.runs.values()]))
 
-    print("\n[28] 文件被 HRack 压缩重写（变小）→ 从头重读，不丢状态机")
+    print("\n[28] 文件被压缩重写（变小）→ 从头重读，不丢状态机")
     with open(log, "w", encoding="utf-8") as fh:
         fh.write(line("session_start", "codex", ws, "Codex", base + 7000) + "\n")
     w.poll()
@@ -892,13 +892,13 @@ def test_hrack_channel() -> None:
           list(w.runs.values())[0].tool_calls == 1,
           str(list(w.runs.values())[0].tool_calls))
 
-    print("\n[30] HRack 状态并进快照：优先级在进程/文件时间之上")
+    print("\n[30] 事件流状态并进快照：优先级在进程/文件时间之上")
     from feishu_hub.state import HookStore, Session
 
     now = time.time()
-    run = hr.Run(cli="grok", workspace=ws, started_at=now - 600, last_at=now - 10,
+    run = fd.Run(cli="grok", workspace=ws, started_at=now - 600, last_at=now - 10,
                  status="needs-you", note="要删 3 个文件")
-    hstate = hr.HRackState(runs={run.key: run}, events_ok=True)
+    fstate = fd.FeedState(runs={run.key: run}, events_ok=True)
     sessions = [Session(
         cli="grok", cli_label="Grok Build", sid="g-1", title="旧会话", cwd=ws,
         last_ts=now - 86400 * 30, start_ts=now - 86400 * 40, msgs=3, tools=1,
@@ -913,23 +913,23 @@ def test_hrack_channel() -> None:
             "msgs": 3, "tools": 1, "tokens": 10, "resumable": True,
             "cmd": "grok -r g-1", "archived": False,
         }], {})
-        snap = st.build_snapshot(HookStore(), hstate)
+        snap = st.build_snapshot(HookStore(), fstate)
     finally:
         st.build_records = orig
     hit = [s for s in snap.sessions if s.sid == "g-1"]
-    check("会话被 HRack 状态接管", hit and hit[0].status == "needs-you",
+    check("会话被事件流状态接管", hit and hit[0].status == "needs-you",
           str(hit[0].status if hit else "none"))
-    check("HRack 的说明带过来了", hit and "删" in hit[0].hrack_note, str(hit))
-    check("最后活动时间跟着 HRack 走（不再显示 1 个月前）",
+    check("事件流的说明带过来了", hit and "删" in hit[0].feed_note, str(hit))
+    check("最后活动时间跟着事件流走（不再显示 1 个月前）",
           hit and hit[0].last_ts > now - 3600, str(hit[0].last_ts if hit else 0))
 
-    print("\n[31] HRack 里有、会话库里没有的 → 补成一行，不能漏掉「等你确认」")
-    run2 = hr.Run(cli="grok", workspace="D:\\proj\\gamma", started_at=now - 60,
+    print("\n[31] 事件流里有、会话库里没有的 → 补成一行，不能漏掉「等你确认」")
+    run2 = fd.Run(cli="grok", workspace="D:\\proj\\gamma", started_at=now - 60,
                   last_at=now - 5, status="needs-you", note="等你批准")
-    hstate2 = hr.HRackState(runs={run2.key: run2}, events_ok=True)
+    fstate2 = fd.FeedState(runs={run2.key: run2}, events_ok=True)
     try:
         st.build_records = lambda *a, **k: ([], {})
-        snap2 = st.build_snapshot(HookStore(), hstate2)
+        snap2 = st.build_snapshot(HookStore(), fstate2)
     finally:
         st.build_records = orig
     check("补出一行", snap2.total == 1, str(snap2.total))
@@ -937,10 +937,10 @@ def test_hrack_channel() -> None:
           snap2.sessions and snap2.sessions[0].status == "needs-you",
           str(snap2.sessions[0].status if snap2.sessions else "none"))
 
-    print("\n[32] 过老的 HRack run 不能把「已结束」顶成「在跑」")
-    old = hr.Run(cli="grok", workspace=ws, started_at=now - 999999,
+    print("\n[32] 过老的事件流 run 不能把「已结束」顶成「在跑」")
+    old = fd.Run(cli="grok", workspace=ws, started_at=now - 999999,
                  last_at=now - 999999, status="running")
-    hstate3 = hr.HRackState(runs={old.key: old}, events_ok=True)
+    fstate3 = fd.FeedState(runs={old.key: old}, events_ok=True)
     try:
         st.build_records = lambda *a, **k: ([{
             "cli": "grok", "cliLabel": "Grok Build", "id": "g-1", "title": "旧会话",
@@ -948,7 +948,7 @@ def test_hrack_channel() -> None:
             "msgs": 3, "tools": 1, "tokens": 10, "resumable": True,
             "cmd": "grok -r g-1", "archived": False,
         }], {})
-        snap3 = st.build_snapshot(HookStore(), hstate3)
+        snap3 = st.build_snapshot(HookStore(), fstate3)
     finally:
         st.build_records = orig
     check("僵尸 run 被丢掉，仍是 ended",
@@ -984,15 +984,22 @@ def test_hrack_channel() -> None:
     check("parse_ask 只认 ask（向后兼容）",
           cards.parse_ask({cards.send_input_name("ses-1"): "x"}) == ("", "", ""))
 
-    print("\n[35] HRack 没开 → 全部降级，不抛异常")
-    link = hr.HRackLink()
+    print("\n[35] 没配置 / 对端没开 → 全部降级，不抛异常")
+    fresh = fd.FeedLink()
+    check("默认没配置：整条通道是关的", fresh.enabled is False, str(fresh.enabled))
+    check("默认没配置：事件流水不算已配置", fresh.watcher.configured is False)
+    check("默认没配置：控制管道不算已配置", fresh.control.configured is False)
+    check("默认没配置：poll() 不发一次 IO 就返回空",
+          fresh.poll().runs == {} and fresh.watcher._offset == 0)
+
+    link = fd.FeedLink()
     link.watcher.path = os.path.join(tmp, "不存在的文件.jsonl")
-    st4 = link.poll(use_bridge=False)
+    st4 = link.poll(use_control=False)
     check("事件流水不可用也不崩", st4.events_ok is False)
     check("runs 是空的", st4.runs == {}, str(len(st4.runs)))
     try:
-        st4b = link.poll(use_bridge=True)
-        check("Bridge 拿不到也照常返回", isinstance(st4b, hr.HRackState))
+        st4b = link.poll(use_control=True)
+        check("Bridge 拿不到也照常返回", isinstance(st4b, fd.FeedState))
     except Exception as exc:                                   # noqa: BLE001
         check("Bridge 拿不到也照常返回", False, str(exc))
     shutil.rmtree(tmp, ignore_errors=True)
@@ -1279,7 +1286,7 @@ def main() -> int:
     test_cwd_lookup()
     test_remote()
     test_bitable_sync()
-    test_hrack_channel()
+    test_feed_channel()
     test_session_store()
 
     print("\n" + "=" * 68)

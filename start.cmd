@@ -36,7 +36,7 @@ if "%MODE%"=="" (
 
 if "%MODE%"=="check" (
   "%PY%" tools\banner.py check
-  call "%HERE%hrack-status.cmd"
+  call "%HERE%offline-check.cmd"
   endlocal & exit /b %errorlevel%
 )
 

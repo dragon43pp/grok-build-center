@@ -33,14 +33,17 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import lark_oapi as lark
 
-from . import cards, hrack, launch, procs, remote
+from . import cards, feed, launch, paths, procs, remote
 from .bitable import BitableError, BitableSync
 from .feishu import FeishuClient, FeishuError, build_dispatcher, run_ws
-from .hrack import BridgeError, HRackLink, HRackState
+from .feed import ControlError, FeedLink, FeedState
 from .state import STATUS_LABEL, HookStore, Session, Snapshot, build_snapshot
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-ROOT = os.path.dirname(HERE)
+# 可写状态（config.json / panel.json / bitable-state.json）放哪。
+# 打包成 exe 之后这里**不是**包内目录，而是 exe 旁边 —— 见 paths.py。
+# 别改回 os.path.dirname(HERE)：那样用户改不到 config.json。
+ROOT = paths.data_root()
 
 # 同一个会话多久内不重复推「有会话在等你」（秒）
 ATTENTION_COOLDOWN = 5 * 60
@@ -73,13 +76,23 @@ class Config:
     remote_auto_approve: bool = False
     remote_timeout: int = 900
 
-    # HRack 通道：读 HRack 自己的事件流水 + 走它的 Bridge 命名管道
-    hrack_enabled: bool = True
-    hrack_poll_secs: int = 5          # 事件流水是增量读，很便宜，可以勤一点
-    hrack_bridge: bool = True         # 走 Bridge 拿 OpenCode 会话 / 反向操作
+    # 外部事件流通道（可选，**默认关**）：读一个外部会话管理器自己写的
+    # append-only 事件流水，外加一条可选的控制管道（能反向放行 / 回答 / 投喂）。
+    # 仓库里刻意不写死任何路径 —— 读什么完全由这几个配置决定，
+    # 不填就整段空转，一次系统调用都不发，面板上也不会多出一行。
+    #
+    # 这条路的用处：对端自己已经在记「哪场卡住了」，所以它拉起的会话
+    # **不用给任何 CLI 配 hook** 也能有橙色的「等你确认」。
+    feed_enabled: bool = False
+    feed_events: str = ""            # 事件流水 JSONL 的路径（空 = 不接）
+    feed_pipe: str = ""              # 控制管道路径（空 = 不做反向操作）
+    feed_token: str = ""             # 控制管道 token 文件（空 = 同上）
+    feed_stats: str = ""             # 可选的统计 JSON，只给历史页面用
+    feed_poll_secs: int = 5          # 事件流水是增量读，很便宜，可以勤一点
+    feed_control: bool = True        # 允许走控制管道（路径没填也照样是关的）
     # 允许从飞书批准待确认项。开着 = 手机上一点就能让本机继续执行工具，
     # 和 remote_auto_approve 一样是信任问题，默认关。
-    hrack_approve: bool = False
+    feed_approve: bool = False
 
     @classmethod
     def load(cls, path: str | None = None) -> "Config":
@@ -163,13 +176,18 @@ class Hub:
         self._bitable_lock = threading.Lock()
         self.bitable_stats: dict = {}
 
-        # HRack 通道。事件流水增量读（几毫秒），Bridge 探测一次 CreateFile，
+        # 外部事件流通道。事件流水增量读（几毫秒），管道探测一次 CreateFile，
         # 都不是重活，所以单独起一个高频线程盯着 —— 比 60 秒的刷新循环
         # 快得多，"卡在等你确认"这种事晚 60 秒才知道就没意义了。
-        self.link = HRackLink()
-        self._hrack: HRackState = HRackState()
-        self._hrack_seen: dict[tuple[str, str], float] = {}
-        self._hrack_lock = threading.Lock()
+        # 没配置时 FeedLink 是空转的，这个线程只是白睡。
+        self.link = FeedLink(
+            events_path=self.cfg.feed_events,
+            pipe=self.cfg.feed_pipe,
+            token=self.cfg.feed_token,
+        )
+        self._feed: FeedState = FeedState()
+        self._feed_seen: dict[tuple[str, str], float] = {}
+        self._feed_lock = threading.Lock()
 
     # ---------------------------------------------------------- 快照
 
@@ -181,8 +199,8 @@ class Hub:
                     return self._snap
             if force or self._snap is None:
                 self.hooks.prune()
-                with self._hrack_lock:
-                    hr = self._hrack
+                with self._feed_lock:
+                    hr = self._feed
                 self._snap = build_snapshot(self.hooks, hr)
                 self._snap_at = time.time()
             assert self._snap is not None
@@ -192,7 +210,7 @@ class Hub:
         return cards.build_panel(
             self.snapshot(max_age=max_age), self._filter, self._page,
             ask=self.cfg.remote_ask,
-            approve=self.cfg.hrack_approve,
+            approve=self.cfg.feed_approve,
         )
 
     # ---------------------------------------------------------- 后台刷新
@@ -382,15 +400,15 @@ class Hub:
     # ---------------------------------------------------------- 远程续跑
 
     def _on_decision(self, value: dict, approve: bool) -> dict:
-        """从飞书批准 / 拒绝一场 HRack 会话的待确认项。
+        """从飞书批准 / 拒绝一场外部会话的待确认项。
 
         只有 Bridge 够得着的会话（当前是 OpenCode）能这么干，而且
-        `hrack_approve` 默认 false —— 手机上一点就让本机继续执行工具，
+        `feed_approve` 默认 false —— 手机上一点就让本机继续执行工具，
         这是信任问题，不是技术问题，默认不给。
         """
-        if not self.cfg.hrack_approve:
+        if not self.cfg.feed_approve:
             return {"type": "warning",
-                    "content": "未开启远程批准（config.json 里 hrack_approve=true 才允许）"}
+                    "content": "未开启远程批准（config.json 里 feed_approve=true 才允许）"}
         s = self._session_of(value.get("cli") or "", value.get("sid") or "")
         if not s or not s.bridge_id:
             return {"type": "warning", "content": "这场会话不支持远程批准"}
@@ -399,7 +417,7 @@ class Hub:
                 self.link.bridge.approve(s.bridge_id)
             else:
                 self.link.bridge.deny(s.bridge_id)
-        except BridgeError as exc:
+        except ControlError as exc:
             return {"type": "error", "content": f"操作失败: {exc}"}
         return {"type": "success",
                 "content": ("已批准，它继续跑了" if approve else "已拒绝")}
@@ -437,7 +455,7 @@ class Hub:
 
         两种表单：
           ask  → 无头续跑（remote.py 另起进程）
-          send → 投喂到 HRack 里正在跑的那一场（Bridge，同一上下文）
+          send → 投喂到外部管理器里正在跑的那一场（控制管道，同一上下文）
         """
         kind, cli, sid, prompt = cards.parse_form(form_value)
         if not prompt:
@@ -461,14 +479,14 @@ class Hub:
         ).start()
 
     def _on_send(self, bridge_id: str, prompt: str) -> None:
-        """投一句话到 HRack 里正在跑的那一场。
+        """投一句话到外部管理器里正在跑的那一场。
 
         跟无头续跑最大的区别：**不会另起进程**。那场会话的上下文是连续的，
-        你在飞书说的这句话，TUI 里能看到。代价是它得是 HRack 里活着的、
+        你在飞书说的这句话，TUI 里能看到。代价是它得是外部管理器里活着的、
         且 Bridge 够得着的会话（当前只有 OpenCode）。
         """
-        if not self.cfg.hrack_bridge:
-            print("[warn] hrack_bridge=false，忽略投喂")
+        if not self.cfg.feed_control:
+            print("[warn] feed_control=false，忽略投喂")
             return
         if not bridge_id:
             print("[warn] 表单里没有 bridge 会话 id")
@@ -476,7 +494,7 @@ class Hub:
         try:
             self.link.bridge.send(bridge_id, prompt)
             print(f"[send] 已投喂 {bridge_id}：{prompt[:60]}")
-        except BridgeError as exc:
+        except ControlError as exc:
             # 投不进去要让用户知道 —— 静默失败的话他会以为话已经到了。
             print(f"[warn] 投喂失败: {exc}")
             self._notify(f"投喂失败：{exc}")
@@ -537,45 +555,45 @@ class Hub:
             time.sleep(self.cfg.refresh_secs)
             self.request_refresh()
 
-    def hrack_loop(self) -> None:
-        """高频盯 HRack：事件流水增量读 + Bridge 探测。
+    def feed_loop(self) -> None:
+        """高频盯外部事件流：增量读 + 控制管道探测。
 
         为什么要单独一条：面板刷新是 60 秒一轮，但「会话卡在等你批准」
         这种事晚一分钟才知道就没什么用了。事件流水是 append-only 的，
         增量读一次只解析新增的那几行，几毫秒的事，5 秒一轮毫无压力。
 
-        HRack 没开 → poll() 静默返回空，这个循环就是空转，什么都不做。
+        没配置 / 对端没开 → poll() 立刻返回空，这个循环就是空转。
         """
         while not self._stop:
-            time.sleep(max(1, self.cfg.hrack_poll_secs))
+            time.sleep(max(1, self.cfg.feed_poll_secs))
             try:
-                state = self.link.poll(use_bridge=self.cfg.hrack_bridge)
+                state = self.link.poll(use_control=self.cfg.feed_control)
             except Exception as exc:                          # noqa: BLE001
-                print(f"[warn] HRack 轮询失败: {exc}")
+                print(f"[warn] 外部事件流轮询失败: {exc}")
                 continue
 
             fresh: list[dict] = []
             changed = False
-            with self._hrack_lock:
-                prev = self._hrack
+            with self._feed_lock:
+                prev = self._feed
                 for key, run in state.runs.items():
                     before = prev.runs.get(key)
                     if before is None or before.status != run.status or run.last_at != before.last_at:
                         changed = True
                     # 新冒出来的「等你确认」才推 —— 已经在等的不再重复推
                     if (run.effective_status() == "needs-you"
-                            and run.last_at > self._hrack_seen.get(key, 0.0)):
+                            and run.last_at > self._feed_seen.get(key, 0.0)):
                         fresh.append({
                             "cli": run.cli,
                             "sid": "",
                             "cwd": run.workspace,
-                            "note": run.note or "HRack 里这场在等你确认",
+                            "note": run.note or "外部事件流里这场在等你确认",
                             "status": "needs-you",
                         })
-                    self._hrack_seen[key] = run.last_at
+                    self._feed_seen[key] = run.last_at
                 if len(prev.bridge) != len(state.bridge):
                     changed = True
-                self._hrack = state
+                self._feed = state
 
             if fresh and self.cfg.push_on_needs_you:
                 for payload in fresh:
@@ -722,12 +740,12 @@ class Hub:
             sys.exit(2)
 
         self.client = FeishuClient(self.cfg.app_id, self.cfg.app_secret, self.cfg.domain)
-        if self.cfg.hrack_enabled:
-            with self._hrack_lock:
-                self._hrack = self.link.poll(use_bridge=self.cfg.hrack_bridge)
-            print(f"[ok] HRack 通道：事件流水 "
-                  f"{'已接上' if self._hrack.events_ok else '不可用'} · "
-                  f"Bridge {self.link.bridge_status}")
+        if self.cfg.feed_enabled and self.link.enabled:
+            with self._feed_lock:
+                self._feed = self.link.poll(use_control=self.cfg.feed_control)
+            print(f"[ok] 外部事件流通道：事件流水 "
+                  f"{'已接上' if self._feed.events_ok else '不可用'} · "
+                  f"控制管道 {self.link.control_status}")
         snap = self.snapshot(force=True)
         print(f"[ok] 扫到 {snap.total} 场会话，存活进程 {snap.live_procs}")
 
@@ -739,8 +757,8 @@ class Hub:
         self.ensure_panel()
         threading.Thread(target=self._refresher, daemon=True).start()
         threading.Thread(target=self.refresh_loop, daemon=True).start()
-        if self.cfg.hrack_enabled:
-            threading.Thread(target=self.hrack_loop, daemon=True).start()
+        if self.cfg.feed_enabled and self.link.enabled:
+            threading.Thread(target=self.feed_loop, daemon=True).start()
 
         handler = build_dispatcher(self.on_message, self.on_card)
         print("[ok] 建立飞书长连接（事件 + 卡片回调都走这里，无需公网 IP）...")
@@ -762,7 +780,7 @@ def print_table(snap: Snapshot) -> None:
         print(f"... 另有 {snap.total - 25} 场")
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="Grok Build Center · 飞书面板")
     ap.add_argument("--print", action="store_true", help="只打印本机状态，不连飞书")
     ap.add_argument("--card-preview", action="store_true", help="打印卡片 JSON 与体积")
@@ -770,7 +788,7 @@ def main() -> int:
                     help="只看要写进多维表格的行，不联网")
     ap.add_argument("--filter", default="active", help="预览用的筛选 key")
     ap.add_argument("--config", default=None, help="config.json 路径")
-    args = ap.parse_args()
+    args = ap.parse_args(argv)
 
     cfg = Config.load(args.config)
     hub = Hub(cfg)

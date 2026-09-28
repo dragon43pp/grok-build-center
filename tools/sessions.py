@@ -343,10 +343,10 @@ def build_parser() -> argparse.ArgumentParser:
     return ap
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     force_utf8()
     ap = build_parser()
-    a = ap.parse_args()
+    a = ap.parse_args(argv)
     if not a.cmd:
         a = ap.parse_args(["list", "--recap", "-n", "20"])
     if a.cmd in ("list", "ls") and not getattr(a, "recap", False):

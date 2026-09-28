@@ -19,22 +19,27 @@ set "PY=%HERE%.venv\Scripts\python.exe"
 if not exist "%PY%" set "PY=python"
 
 "%PY%" tools\banner.py step 1
-"%PY%" -m feishu_hub.hrack
+"%PY%" tools\sessions.py list -n 15
+"%PY%" tools\banner.py note sessions
 echo.
 
 "%PY%" tools\banner.py step 2
-"%PY%" -m feishu_hub.hub --print
+"%PY%" -m feishu_hub.feed
 echo.
 
 "%PY%" tools\banner.py step 3
+"%PY%" -m feishu_hub.hub --print
+echo.
+
+"%PY%" tools\banner.py step 4
 "%PY%" tools\smoke_test.py
 set "RC=%errorlevel%"
 
-rem ---------- 4. the searchable history page ----------
-rem This is where the PAST sessions actually live. HRack's own window
+rem ---------- 5. the searchable history page ----------
+rem This is where the PAST sessions actually live. The agent window
 rem keeps its session list only in memory, so history never shows up
 rem there -- this page is the answer to "where are my old sessions".
-"%PY%" tools\banner.py step 4
+"%PY%" tools\banner.py step 5
 "%PY%" -m feishu_hub.scan --out "%HERE%session-history.html" --open
 
 echo.

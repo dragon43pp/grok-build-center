@@ -36,13 +36,18 @@
   "remote_auto_approve": false,
   "remote_timeout": 900,
 
-  "_hrack": "HRack 通道：读 HRack 自己的事件流水 + 走它的 Bridge 命名管道。HRack 没开也不会崩，全部降级。",
-  "_hrack_说明": "事件流水能给出「等你确认」——HRack 本来就在记 blocked 事件，所以 HRack 拉起的会话**不用配 CLI hook** 也有橙色。",
-  "_hrack_bridge": "Bridge 能反向操作（批准 / 拒绝 / 投喂），但 HRack 那边目前只放行 OpenCode 会话。关掉就完全不碰管道。",
-  "_hrack_approve": "**默认 false 是对的**。开着 = 手机上点一下就让本机继续执行工具，跟 remote_auto_approve 是同一类信任问题。",
-  "_hrack_poll_secs": "事件流水是增量读（几毫秒），5 秒一轮毫无压力。别设太大 —— 「卡在等你批准」晚一分钟才知道就没用了。",
-  "hrack_enabled": true,
-  "hrack_bridge": true,
-  "hrack_approve": false,
-  "hrack_poll_secs": 5
+  "_feed": "外部事件流通道（可选，**默认全关**）。本仓库刻意不写死任何路径 —— 读什么完全由下面几个键决定，不填就整段空转，一次系统调用都不发。",
+  "_feed_说明": "它能给出「等你确认」：对端自己本来就在记「哪场卡住了」，所以它拉起的会话**不用配任何 CLI hook** 也有橙色。没有这个对端就保持关闭，面板照常工作。",
+  "_feed_events": "对端写的 append-only 事件流水（一行一个 JSON）。空 = 不接。",
+  "_feed_pipe": "可选的控制管道路径，用来做反向操作（批准 / 拒绝 / 回答 / 投喂）。空 = 不做反向操作。对端可能只放行部分 adapter 的会话，拿不到别的不是 bug。",
+  "_feed_token": "控制管道的 token 文件（内容为 64 位 hex）。",
+  "_feed_approve": "**默认 false 是对的**。开着 = 手机上点一下就让本机继续执行工具，跟 remote_auto_approve 是同一类信任问题。",
+  "_feed_poll_secs": "事件流水是增量读（几毫秒），5 秒一轮毫无压力。别设太大 —— 「卡在等你批准」晚一分钟才知道就没用了。",
+  "feed_enabled": false,
+  "feed_events": "",
+  "feed_pipe": "",
+  "feed_token": "",
+  "feed_control": true,
+  "feed_approve": false,
+  "feed_poll_secs": 5
 }

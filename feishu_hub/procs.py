@@ -51,7 +51,7 @@ CLI_SIGNATURES: dict[str, dict[str, tuple[str, ...]]] = {
         "names": ("cline", "cline.exe"),
         "cmdline": ("npm/cline", "npm\\cline"),
     },
-    # HRack 支持这两个，原来只在 HRack 里能看见，这边的进程扫描认不出来
+    # 这两个 adapter 只在外部管理器里能看见，这边的进程扫描认不出来
     "kimi": {
         "names": ("kimi", "kimi.exe"),
         "cmdline": ("npm/kimi", "npm\\kimi", "@moonshot", "kimi-code", "kimi-cli"),

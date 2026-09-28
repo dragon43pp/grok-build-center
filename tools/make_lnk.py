@@ -13,10 +13,10 @@ CoCreateInstance(CLSID_ShellLink) → 设属性 → IPersistFile::Save。
                              [--args 参数] [--desc 说明] [--icon ico路径]
 
 例：
-    python tools/make_lnk.py D:\\agent-hub\\run.cmd ^
-        "%APPDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\AI\\启动.lnk" ^
-        --workdir D:\\agent-hub --desc "启动飞书面板" ^
-        --icon D:\\hrack桌面版\\resources\\tray\\hrack.ico
+    python tools/make_lnk.py D:\\grok-build-center\\start.cmd ^
+        "%APPDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Grok Build Center.lnk" ^
+        --workdir D:\\grok-build-center --desc "Grok Build 会话管理中心" ^
+        --icon D:\\grok-build-center\\assets\\icon\\center.ico
 """
 
 from __future__ import annotations

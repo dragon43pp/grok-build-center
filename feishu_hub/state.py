@@ -20,7 +20,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
 from . import procs
-from .hrack import HRackState
+from .feed import FeedState
 from .scan import build_records
 
 # hook 上报的事件多久算过期（秒）。CLI 那边一次确认交互不会超过这么久。
@@ -29,11 +29,11 @@ HOOK_TTL = 30 * 60
 # 进程活着但多久没活动算 idle（秒）
 IDLE_AFTER = 5 * 60
 
-# HRack 事件流水里的「最后活动」多久之内还值得信（秒）。
-# HRack 退出后 events.jsonl 不会清空，那些 run 会一直躺在文件里 ——
+# 外部事件流水里的「最后活动」多久之内还值得信（秒）。
+# 对端退出后 events.jsonl 不会清空，那些 run 会一直躺在文件里 ——
 # 拿 41 小时前的一条 tool_call 去覆盖「已结束」的判断，会把面板搞成
 # 「一堆永远在跑的僵尸会话」。所以超过这个窗口就当它不存在。
-HRACK_FRESH = 6 * 3600
+FEED_FRESH = 6 * 3600
 
 STATUS_ORDER = {
     "needs-you": 0,
@@ -84,8 +84,8 @@ CLI_LABEL = {
     "kimi": "Kimi CLI",
     "amp": "Amp",
     "cline": "Cline",
-    # HRack 侧的 adapter 补齐：这两个 scan/procs/launch 三处原来都漏了，
-    # 结果是 HRack 里跑得好好的会话，在面板上连名字都显示不对。
+    # 外部管理器侧的 adapter 补齐：这两个 scan/procs/launch 三处原来都漏了，
+    # 结果它在跑得好好的会话，在面板上连名字都显示不对。
     "pi": "Pi",
     "droid": "Droid",
 }
@@ -110,8 +110,8 @@ class Session:
     live_pids: list[int] = field(default_factory=list)
     hook_note: str = ""
 
-    # HRack 通道带来的：权威状态说明 + 可反向操作的 OpenCode 会话 id
-    hrack_note: str = ""
+    # 外部事件流带来的：权威状态说明 + 可反向操作的会话 id
+    feed_note: str = ""
     bridge_id: str = ""
     controllable: bool = False
 
@@ -219,37 +219,37 @@ class Snapshot:
 
 
 def build_snapshot(hooks: HookStore | None = None,
-                   hrack: HRackState | None = None) -> Snapshot:
+                   feed: FeedState | None = None) -> Snapshot:
     """合成统一快照。
 
-    状态优先级：**hook > HRack > 进程 > 文件时间**。
+    状态优先级：**hook > 外部事件流 > 进程 > 文件时间**。
 
-    HRack 排在进程前面，是因为它比进程表知道得多 —— 进程表只能说「活着」，
-    HRack 的 `blocked` 事件能说「活着并且卡在等你批准」。
-    反过来 HRack 不知道的（比如你在系统终端里手动开的 codex），进程表还能兜住。
+    事件流排在进程前面，是因为它比进程表知道得多 —— 进程表只能说「活着」，
+    而 `blocked` 事件能说「活着并且卡在等你批准」。
+    反过来事件流不知道的（比如你在系统终端里手动开的 codex），进程表还能兜住。
     """
     records, _stats = build_records()
     live = procs.scan_live()
     hooks = hooks or HookStore()
-    hrack = hrack or HRackState()
+    feed = feed or FeedState()
 
-    # HRack 会话索引：(cli, 规范化目录) → Run。过老的丢掉（HRack 退出后
+    # 事件流会话索引：(cli, 规范化目录) → Run。过老的丢掉（对端退出后
     # events.jsonl 不清空，那些 run 会一直躺着变成僵尸）。
     now = time.time()
     hby_key: dict[tuple[str, str], object] = {}
-    for key, run in hrack.runs.items():
-        if not run.exited and (now - run.last_at) <= HRACK_FRESH:
+    for key, run in feed.runs.items():
+        if not run.exited and (now - run.last_at) <= FEED_FRESH:
             hby_key[key] = run
     # Bridge（OpenCode）按工作目录再建一层索引，用来给会话挂「可反向操作」标记
     bby_key: dict[tuple[str, str], object] = {}
-    for bs in hrack.bridge.values():
+    for bs in feed.bridge.values():
         bby_key[bs.key] = bs
 
     sessions: list[Session] = []
     matched: set[str] = set()
-    matched_hrack: set[tuple[str, str]] = set()
+    matched_feed: set[tuple[str, str]] = set()
     for r in records:
-        # 空 id 的占位行是噪音（HRack 启动过但没留下会话文件），直接滤掉
+        # 空 id 的占位行是噪音（对端启动过但没留下会话文件），直接滤掉
         if not r.get("id"):
             continue
 
@@ -278,7 +278,7 @@ def build_snapshot(hooks: HookStore | None = None,
             controllable=bool(bridge),
         )
 
-        # 状态判定：hook > HRack > 进程 > 时间
+        # 状态判定：hook > 事件流 > 进程 > 时间
         ev = hooks.get(s.cli, s.sid, s.cwd)
         run = hby_key.get(ckey)
         if ev:
@@ -286,10 +286,10 @@ def build_snapshot(hooks: HookStore | None = None,
             s.status = ev["status"]
             s.hook_note = ev.get("note") or ""
         elif run is not None:
-            matched_hrack.add(ckey)
+            matched_feed.add(ckey)
             s.status = run.effective_status()
-            s.hrack_note = run.note
-            # HRack 说在跑，那 last_ts 就该跟着 HRack 走 ——
+            s.feed_note = run.note
+            # 事件流说在跑，那 last_ts 就该跟着它走 ——
             # 会话文件可能很久没落盘，但会话明明是活的。
             s.last_ts = max(s.last_ts, run.last_at)
         elif pids:
@@ -300,10 +300,10 @@ def build_snapshot(hooks: HookStore | None = None,
 
         sessions.append(s)
 
-    # HRack 里有、但会话库里没有的：多半是刚开还没落盘，或者是 HRack 自己
+    # 事件流里有、但会话库里没有的：多半是刚开还没落盘，或者是对端自己
     # 拉起而 CLI 没写会话文件的场次。宁可多一行，不能漏掉「等你确认」。
     for ckey, run in hby_key.items():
-        if ckey in matched_hrack:
+        if ckey in matched_feed:
             continue
         cli, cwd = ckey
         bridge = bby_key.get(ckey)
@@ -312,7 +312,7 @@ def build_snapshot(hooks: HookStore | None = None,
                 cli=cli,
                 cli_label=CLI_LABEL.get(cli, cli),
                 sid="",
-                title=run.note or f"(HRack 拉起 · {os.path.basename(cwd) or cwd})",
+                title=run.note or f"(外部拉起 · {os.path.basename(cwd) or cwd})",
                 cwd=cwd,
                 last_ts=run.last_at,
                 start_ts=run.started_at,
@@ -323,7 +323,7 @@ def build_snapshot(hooks: HookStore | None = None,
                 cmd="",
                 archived=False,
                 status=run.effective_status(),
-                hrack_note=run.note,
+                feed_note=run.note,
                 bridge_id=(bridge.session_id if bridge else ""),
                 controllable=bool(bridge),
             )

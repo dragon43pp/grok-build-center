@@ -9,7 +9,7 @@
 
 数据源
 ------
-  HRack      %APPDATA%\\HRack\\events\\events.jsonl          启动流水（标记哪场由 HRack 拉起）
+  事件流     config.json 的 feed_events 指到的 JSONL         启动流水（可选，标记哪场由它拉起）
   Grok       ~/.grok/sessions/<esc-cwd>/<sid>/summary.json
              ~/.grok/sessions/session_search.sqlite          FTS5 全文索引
   Codex      ~/.codex/state_5.sqlite            → threads 表（288 条：title/name/cwd/archived/tokens）
@@ -41,8 +41,7 @@ import urllib.parse
 import webbrowser
 from datetime import datetime, timezone
 
-APP_NAME = "HRack"
-GROK_SESSION_GRACE_SECONDS = 180   # HRack session_start 与 grok created_at 的容差
+GROK_SESSION_GRACE_SECONDS = 180   # session_start 与 grok created_at 的容差
 EXCERPT_LIMIT = 12000              # 每条记录嵌入 HTML 的正文上限（字符）
 
 # CLI 元信息：显示名 / 主题色 / 恢复命令模板
@@ -55,8 +54,8 @@ CLI_META = {
                  "resume": 'cd /d {cwd} && claude -r {id}'},
     "opencode": {"label": "opencode",   "short": "opencode", "hue": "#0369a1",
                  "resume": 'cd /d {cwd} && opencode --session {id}'},
-    # HRack 支持这两个 adapter，但 scan / procs / launch 三处原来都漏了，
-    # 结果 HRack 里跑着的 kimi / pi 会话在这里连显示名都没有。
+    # 这两个 adapter 只在外部管理器里能看见，scan / procs / launch 三处
+    # 原来都漏了，结果它们拉起的 kimi / pi 会话在这里连显示名都没有。
     "kimi":     {"label": "Kimi",       "short": "kimi",     "hue": "#2563eb",
                  "resume": 'cd /d {cwd} && kimi --session {id}'},
     "pi":       {"label": "Pi",         "short": "pi",       "hue": "#7c2d12",
@@ -69,12 +68,30 @@ CLI_ORDER = ["grok", "codex", "claude", "opencode", "kimi", "pi"]
 # 路径与通用工具
 # --------------------------------------------------------------------------
 
-def user_data_dir() -> str:
-    # Git Bash / 精简环境里 %APPDATA% 可能不存在，退回 ~/AppData/Roaming
-    appdata = os.environ.get("APPDATA")
-    if not appdata:
-        appdata = os.path.join(os.path.expanduser("~"), "AppData", "Roaming")
-    return os.path.join(appdata, APP_NAME)
+def load_feed_paths(config_path: str = "") -> tuple[str, str]:
+    """读 config.json 拿可选事件流的路径。返回 (events, stats)，空 = 不接。
+
+    为什么放在 scan.py 而不是从 feed.py 引：这个页面要能**单独跑**，
+    不应该为了一个可选的、默认关闭的数据源去拉整个 feed 模块（它还要
+    import threading / 管道那套）。这里只需要两个路径字符串。
+    """
+    path = config_path or os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "config.json")
+    try:
+        with open(path, encoding="utf-8") as fh:
+            raw = json.load(fh)
+    except (OSError, ValueError):
+        return "", ""
+    if not raw.get("feed_enabled"):
+        return "", ""
+    events = str(raw.get("feed_events") or "").strip()
+    stats = str(raw.get("feed_stats") or "").strip()
+    if not events:
+        return "", ""
+    if not stats:
+        # 惯例：stats.json 跟 events.jsonl 同目录
+        stats = os.path.join(os.path.dirname(events), "stats.json")
+    return events, stats
 
 
 def home() -> str:
@@ -150,7 +167,7 @@ def squeeze(text: str | None, limit: int = 400) -> str:
 def make_record(cli: str, sid: str, title: str, cwd: str, start, last,
                 msgs: int = 0, tools: int = 0, tokens: int = 0,
                 archived: bool = False, pinned: bool = False,
-                via_hrack: bool = False, resumable: bool = True,
+                via_feed: bool = False, resumable: bool = True,
                 excerpt: str = "", note: str = "") -> dict:
     meta = CLI_META.get(cli, {})
     cmd = ""
@@ -173,7 +190,7 @@ def make_record(cli: str, sid: str, title: str, cwd: str, start, last,
         "tokens": int(tokens or 0),
         "archived": bool(archived),
         "pinned": bool(pinned),
-        "viaHrack": bool(via_hrack),
+        "viaFeed": bool(via_feed),
         "resumable": bool(resumable and sid),
         "cmd": cmd,
         "excerpt": squeeze(excerpt, EXCERPT_LIMIT),
@@ -183,12 +200,12 @@ def make_record(cli: str, sid: str, title: str, cwd: str, start, last,
 
 
 # --------------------------------------------------------------------------
-# 数据源 0：HRack 事件流水（仅用于标记「哪场是 HRack 启动的」）
+# 数据源 0：外部事件流（仅用于标记「哪场是它拉起的」，可选）
 # --------------------------------------------------------------------------
 
-# HRack 的 adapterId → 本项目内部的 cli 名。两边叫法不一样，
-# 不映射的话 HRack 拉起的 kimi / codex 会话会被统统记成 grok。
-HRACK_ADAPTER_TO_CLI = {
+# 对端的 adapterId → 本项目内部的 cli 名。两边叫法不一样，
+# 不映射的话它拉起的 kimi / codex 会话会被统统记成 grok。
+FEED_ADAPTER_TO_CLI = {
     "grok": "grok",
     "grok-build": "grok",
     "codex": "codex",
@@ -201,31 +218,34 @@ HRACK_ADAPTER_TO_CLI = {
 }
 
 
-def hrack_cli(adapter_id: str) -> str:
-    return HRACK_ADAPTER_TO_CLI.get(str(adapter_id or "").lower(),
+def feed_cli(adapter_id: str) -> str:
+    return FEED_ADAPTER_TO_CLI.get(str(adapter_id or "").lower(),
                                     str(adapter_id or "").lower())
 
 
-def read_hrack_events() -> tuple[list[dict], dict]:
-    """把 events.jsonl 还原成一场场会话（按 session_start / session_exit 切分）。
+def read_feed_events(events: str = "", stats_path: str = "") -> tuple[list[dict], dict]:
+    """把事件流水还原成一场场会话（按 session_start / session_exit 切分）。
 
-    HRack 记的 kind 有六种，这里全都要认：
+    对端记的 kind 有六种，这里全都要认：
 
         session_start / tool_call / **blocked** / **approved** / completed / session_exit
 
     `blocked` 是「卡在等你确认」，`approved` 是「放行了」—— 这两个原来被漏掉，
-    等于把 HRack 唯一比进程表多知道的那点信息直接扔了。
+    等于把这条路唯一比进程表多知道的那点信息直接扔了。
 
     坑：文件里**没有 sessionId**（每次事件的 `id` 是 UUID），所以一场会话只能
     靠「session_start 之后、session_exit 之前」这段区间来界定。也因此
-    **新的一场开始时必须把上一场收掉** —— 否则 HRack 连续开三场，
+    **新的一场开始时必须把上一场收掉** —— 否则对端连续开三场，
     后面两场的所有事件都会算到第一场头上。
-    """
-    base = user_data_dir()
-    log_path = os.path.join(base, "events", "events.jsonl")
-    stats_path = os.path.join(base, "events", "stats.json")
 
+    `events` 为空 = 这条路没启用，直接返回空，不碰任何文件。
+    """
+    log_path = events
     stats = {"sessions": 0, "toolCalls": 0, "blocked": 0, "approvals": 0}
+    if not log_path:
+        return [], stats
+    if not stats_path:
+        stats_path = os.path.join(os.path.dirname(log_path), "stats.json")
     if os.path.exists(stats_path):
         try:
             with open(stats_path, encoding="utf-8") as fh:
@@ -253,9 +273,9 @@ def read_hrack_events() -> tuple[list[dict], dict]:
             when = from_epoch_ms(ts) if isinstance(ts, (int, float)) else None
 
             if kind == "session_start":
-                # 上一场没退就又开一场（HRack 崩过 / 直接被杀），先按没退处理收掉
+                # 上一场没退就又开一场（对端崩过 / 直接被杀），先按没退处理收掉
                 current = {
-                    "adapterId": hrack_cli(event.get("adapterId")),
+                    "adapterId": feed_cli(event.get("adapterId")),
                     "adapterTitle": event.get("title") or "",
                     "workspace": event.get("detail") or "",
                     "startedAt": when,
@@ -791,18 +811,19 @@ def _opencode_parts(part_root: str, msg_id: str) -> list[str]:
 # 汇总
 # --------------------------------------------------------------------------
 
-def build_records(cli_filter: set[str] | None = None) -> tuple[list[dict], dict]:
+def build_records(cli_filter: set[str] | None = None,
+                  feed_events: str = "", feed_stats: str = "") -> tuple[list[dict], dict]:
     want = (lambda c: cli_filter is None or c in cli_filter)
     records: list[dict] = []
     counts: dict[str, int] = {}
 
-    runs, stats = read_hrack_events()
-    run_tool_calls: dict[str, int] = {}   # sessionId -> HRack 统计的工具调用数
+    runs, stats = read_feed_events(feed_events, feed_stats)
+    run_tool_calls: dict[str, int] = {}   # sessionId -> 对端统计的工具调用数
     run_by_session: dict[str, dict] = {}
     matched_run_indexes: set[int] = set()
 
-    # 先把各家的会话收齐，再统一把 HRack 启动记录挂上去。
-    # 顺序不能反：原来只拿 grok 会话去匹配，HRack 拉起的 codex / claude / kimi
+    # 先把各家的会话收齐，再统一把外部启动记录挂上去。
+    # 顺序不能反：原来只拿 grok 会话去匹配，它拉起的 codex / claude / kimi
     # 场次一律匹配不上，最后被当成 grok 合成一条噪音行 —— 标签是错的，
     # 而且跟真实会话重了一份。
     collected: dict[str, list[dict]] = {}
@@ -822,8 +843,8 @@ def build_records(cli_filter: set[str] | None = None) -> tuple[list[dict], dict]
     codex_counts = read_codex_counts() if want("codex") else {}
     prompt_hist = read_codex_prompt_history() if want("codex") else {}
 
-    # 用「同 CLI + 同工作空间 + 开始时间邻近」把 HRack 启动记录挂到会话上。
-    # HRack 不写 sessionId，这是唯一能做的关联 —— 好在 HRack 一次只在一个
+    # 用「同 CLI + 同工作空间 + 开始时间邻近」把外部启动记录挂到会话上。
+    # 流水里不写 sessionId，这是唯一能做的关联 —— 好在对端一次只在一个
     # 工作空间里跑同一个 adapter，容差 180 秒足够区分先后两场。
     for idx, run in enumerate(runs):
         rcli = run["adapterId"] or "grok"
@@ -854,7 +875,7 @@ def build_records(cli_filter: set[str] | None = None) -> tuple[list[dict], dict]
             session["createdAt"], session["updatedAt"],
             msgs=session["numChatMessages"] or session["numMessages"],
             tools=run_tool_calls.get(sid, 0),
-            via_hrack=run is not None,
+            via_feed=run is not None,
             resumable=not headless,
             excerpt=grok_index.get(sid, ""),
             note="headless" if headless else "",
@@ -871,7 +892,7 @@ def build_records(cli_filter: set[str] | None = None) -> tuple[list[dict], dict]
             msgs=counter.get("msgs", 0), tools=counter.get("tools", 0),
             tokens=session["tokens"],
             archived=session["archived"], pinned=session["pinned"],
-            via_hrack=sid in run_by_session,
+            via_feed=sid in run_by_session,
             excerpt=excerpt,
             note=(" · ".join(x for x in (
                 session["source"],
@@ -888,7 +909,7 @@ def build_records(cli_filter: set[str] | None = None) -> tuple[list[dict], dict]
             session["createdAt"], session["updatedAt"],
             msgs=session["msgs"],
             tools=session["tools"] or run_tool_calls.get(sid, 0),
-            via_hrack=sid in run_by_session,
+            via_feed=sid in run_by_session,
             excerpt=" ".join(session.get("prompts") or []),
         ))
 
@@ -900,12 +921,12 @@ def build_records(cli_filter: set[str] | None = None) -> tuple[list[dict], dict]
             session["createdAt"], session["updatedAt"],
             msgs=session["msgs"],
             tools=session["tools"] or run_tool_calls.get(sid, 0),
-            via_hrack=sid in run_by_session,
+            via_feed=sid in run_by_session,
             excerpt=session.get("excerpt", ""),
             note=session.get("slug") or "",
         ))
 
-    # 没能挂到任何会话上的 HRack 启动记录，单独列一行（会话文件已不在磁盘）。
+    # 没能挂到任何会话上的外部启动记录，单独列一行（会话文件已不在磁盘）。
     # 用 run 自己的 adapterId 当 cli —— 原来这里写死 "grok"，kimi/codex 的
     # 场次都被贴成了 Grok。
     for idx, run in enumerate(runs):
@@ -917,14 +938,14 @@ def build_records(cli_filter: set[str] | None = None) -> tuple[list[dict], dict]
         records.append(make_record(
             rcli, "", run["adapterTitle"] or "(未命名会话)",
             run["workspace"], run["startedAt"], run["endedAt"],
-            tools=run["toolCalls"], via_hrack=True, resumable=False,
+            tools=run["toolCalls"], via_feed=True, resumable=False,
             note="会话文件已不在磁盘",
         ))
-    counts["hrack-unmatched"] = len(runs) - len(matched_run_indexes)
+    counts["feed-unmatched"] = len(runs) - len(matched_run_indexes)
 
     records.sort(key=lambda r: r["sortKey"], reverse=True)
-    stats["hrackRuns"] = len(runs)
-    stats["hrackMatched"] = len(matched_run_indexes)
+    stats["feedRuns"] = len(runs)
+    stats["feedMatched"] = len(matched_run_indexes)
     return records, stats
 
 
@@ -1031,8 +1052,8 @@ TEMPLATE = """<!DOCTYPE html>
 
   <div class="note">
     <b>为什么原来的工具看不到这些？</b>
-    HRack 的会话列表只存在于主进程内存（PTY 进程），退出即清空，且只把 <code>terminalId</code> 写进
-    Local Storage，<b>你起的名字从未落盘</b>。本页直接从各家 CLI 自己的会话库里重建——
+    很多会话管理器的列表只活在主进程内存里，退出即清空，名字从未落盘。本页直接从各家
+    CLI 自己的会话库里重建——
     包含 <b>grok / Codex / Claude Code / opencode</b>，并且<b>能搜对话正文</b>。
   </div>
 
@@ -1042,7 +1063,7 @@ TEMPLATE = """<!DOCTYPE html>
       <span id="meta"></span>
       <span class="toggles">
         <label><input type="checkbox" id="hideArchived"> 隐藏已归档</label>
-        <label><input type="checkbox" id="onlyHrack"> 只看 HRack 启动</label>
+        <label><input type="checkbox" id="onlyFeed"> 只看外部启动</label>
         <label><input type="checkbox" id="groupWs"> 按工作空间分组</label>
       </span>
     </div>
@@ -1066,7 +1087,7 @@ TEMPLATE = """<!DOCTYPE html>
     · <b>Codex</b>：桌面端线程标题存在 <code>~/.codex/state_5.sqlite</code> 的 <code>threads</code> 表，<code>codex resume &lt;ID&gt;</code> 直接续聊。<br>
     · <b>Claude Code</b>：<code>claude -r &lt;ID&gt;</code> 或 <code>claude -c</code> 续聊上一场。<br>
     · <b>opencode</b>：<code>opencode --session &lt;ID&gt;</code> 或 <code>opencode -c</code>。<br>
-    在 HRack 界面里改的名字<b>不会持久化</b>——这是 HRack 的缺陷，不是你的操作问题。
+    名字以会话库里的为准：在别的工具界面里改的名字<b>不会落到会话库</b>，不是你的操作问题。
   </div>
 </div>
 <div class="toast" id="toast">已复制</div>
@@ -1103,7 +1124,7 @@ function row(rec, term) {
     ? '<code class="cmd" data-cmd="' + esc(rec.cmd) + '">' + esc(rec.cmd) + '</code>'
     : '<span class="dim">-</span>';
   const badges = [];
-  if (rec.viaHrack) badges.push('<span class="badge">HRack 启动</span>');
+  if (rec.viaFeed) badges.push('<span class="badge">外部启动</span>');
   if (rec.archived) badges.push('<span class="badge">已归档</span>');
   if (rec.note) badges.push('<span class="badge">' + esc(rec.note) + '</span>');
   const idCell = rec.id
@@ -1133,13 +1154,13 @@ function render() {
   const t = (document.getElementById('q').value || '').trim();
   const low = t.toLowerCase();
   const hideArchived = document.getElementById('hideArchived').checked;
-  const onlyHrack = document.getElementById('onlyHrack').checked;
+  const onlyFeed = document.getElementById('onlyFeed').checked;
   const groupWs = document.getElementById('groupWs').checked;
 
   const matched = DATA.filter(function (r) {
     if (!activeClis.has(r.cli)) return false;
     if (hideArchived && r.archived) return false;
-    if (onlyHrack && !r.viaHrack) return false;
+    if (onlyFeed && !r.viaFeed) return false;
     if (!t) return true;
     return (r.title + ' ' + r.cwd + ' ' + r.id + ' ' + r.note + ' ' + r.excerpt)
       .toLowerCase().indexOf(low) >= 0;
@@ -1170,7 +1191,7 @@ function render() {
   document.getElementById('tb').innerHTML = html;
   document.getElementById('empty').style.display = matched.length ? 'none' : 'block';
   document.getElementById('c-main').textContent = '· ' + matched.length + ' 场';
-  const filtered = t || hideArchived || onlyHrack || activeClis.size < Object.keys(CLI_LABELS).length;
+  const filtered = t || hideArchived || onlyFeed || activeClis.size < Object.keys(CLI_LABELS).length;
   document.getElementById('meta').textContent = filtered
     ? '匹配 ' + matched.length + ' / ' + DATA.length + ' 场会话'
     : '共 ' + DATA.length + ' 场会话';
@@ -1212,7 +1233,7 @@ document.getElementById('q').addEventListener('input', function () {
   clearTimeout(timer);
   timer = setTimeout(render, 120);
 });
-['hideArchived', 'onlyHrack', 'groupWs'].forEach(function (id) {
+['hideArchived', 'onlyFeed', 'groupWs'].forEach(function (id) {
   document.getElementById(id).addEventListener('change', render);
 });
 
@@ -1258,14 +1279,29 @@ def render_html(records: list[dict], counts: dict, generated_at: datetime) -> st
 # 主流程
 # --------------------------------------------------------------------------
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="扫描本机全部 AI CLI 的会话历史")
     parser.add_argument("--out", default=None, help="输出 HTML 路径")
     parser.add_argument("--open", dest="open_after", action="store_true", help="生成后打开浏览器")
     parser.add_argument("--search", default=None, help="在终端全文搜索所有 CLI 会话")
     parser.add_argument("--cli", default=None,
                         help="只扫指定 CLI，逗号分隔（grok,codex,claude,opencode）")
-    args = parser.parse_args()
+    parser.add_argument("--feed-events", default=None,
+                        help="可选：外部事件流水 JSONL 的路径（默认读 config.json 的 feed_events）")
+    parser.add_argument("--feed-stats", default=None,
+                        help="可选：外部事件统计 JSON（默认取同目录的 stats.json）")
+    args = parser.parse_args(argv)
+
+    # 这个页面默认**不接**任何外部数据源；要么 config.json 里开了，
+    # 要么命令行显式给路径。没给就是个纯本机扫描器。
+    cfg_events, cfg_stats = load_feed_paths()
+    if args.feed_events is not None:
+        # 命令行显式指定就以命令行为准，不跟 config 叠加
+        feed_events = args.feed_events
+        feed_stats = args.feed_stats or ""
+    else:
+        feed_events = cfg_events
+        feed_stats = args.feed_stats if args.feed_stats is not None else cfg_stats
 
     cli_filter = None
     if args.cli:
@@ -1279,7 +1315,7 @@ def main() -> int:
     here = os.path.dirname(os.path.abspath(__file__))
 
     if args.search:
-        records, _ = build_records(cli_filter)
+        records, _ = build_records(cli_filter, feed_events, feed_stats)
         term = args.search
         low = term.lower()
         hits = [r for r in records
@@ -1301,7 +1337,7 @@ def main() -> int:
         return 0
 
     out_path = args.out or os.path.join(here, "session-history.html")
-    records, stats = build_records(cli_filter)
+    records, stats = build_records(cli_filter, feed_events, feed_stats)
     counts = {c: sum(1 for r in records if r["cli"] == c) for c in CLI_ORDER}
 
     document = render_html(records, counts, datetime.now())
@@ -1312,8 +1348,10 @@ def main() -> int:
     print("-" * 46)
     for cli in CLI_ORDER:
         print(f"  {CLI_META[cli]['label']:<13}: {counts.get(cli, 0):>5} 场")
-    print(f"  {'HRack 启动记录':<11}: {stats.get('hrackRuns', 0):>5} 场"
-          f"（匹配到 grok 会话 {stats.get('hrackMatched', 0)} 场）")
+    if feed_events:
+        # 这条路是可选的，没接就别在输出里占一行
+        print(f"  {'外部启动记录':<11}: {stats.get('feedRuns', 0):>5} 场"
+              f"（匹配到 grok 会话 {stats.get('feedMatched', 0)} 场）")
     print(f"  {'可搜正文':<13}: {sum(1 for r in records if r['excerpt']):>5} 场")
     print(f"  {'合计':<13}: {len(records):>5} 场")
     print("-" * 46)

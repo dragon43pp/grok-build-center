@@ -223,10 +223,10 @@ DETAIL_BUDGET = 16 * 1024
 # 而回调只回 `form_value`（按组件 name 映射）。所以把 cli/sid 编进 name。
 INPUT_PREFIX = "p__"
 
-# 「投喂到活着的那一场」用的前缀。走 HRack Bridge 的 session.send，
+# 「投喂到活着的那一场」用的前缀。走控制管道的 session.send，
 # 跟上面的无头续跑是**两条不同的路**：
 #   p__ → remote.py 另起一个无头进程（那场 TUI 看不到这句话）
-#   s__ → 直接塞进 HRack 里正在跑的那一场（同一场会话，上下文连续）
+#   s__ → 塞进外部管理器里正在跑的那一场（同一场会话，上下文连续）
 # 表单内的提交按钮带不了 behaviors，所以身份只能编进 name —— 跟 p__ 同理。
 SEND_PREFIX = "s__"
 
@@ -309,11 +309,11 @@ def build_detail(s: Session, turns: list, ask: bool = True, hint: str = "") -> d
     # form 只能待在卡片根节点下，不能被别的容器套住 —— 直接放进 body.elements
     if ask and (s.bridge_id or s.sid):
         if s.bridge_id:
-            # 这场是 HRack 里活着的（当前只有 OpenCode 会话），直接投进去。
+            # 这场在外部管理器里是活着的，直接投进去。
             # 走的是同一场会话，上下文连续 —— 不像无头续跑那样另起炉灶。
             elements.append({
                 "tag": "markdown",
-                "content": "<font color='green'>这场正在 HRack 里跑着，"
+                "content": "<font color='green'>这场正在外部管理器里跑着，"
                            "下面这句会**直接投进这一场**（同一上下文）。</font>",
             })
             elements.append({

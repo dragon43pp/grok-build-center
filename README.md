@@ -61,11 +61,11 @@
 | 状态 | 来源 | 可信度 |
 | --- | --- | --- |
 | 🟠 等你确认 / 🔴 报错 | CLI 的 hook 主动上报 | 最准，但要配 hook |
-| 🟠 等你确认 | **HRack 事件流里的 `blocked`** | 同样准，且**不用配 hook** |
+| 🟠 等你确认 | **外部事件流里的 `blocked`**（可选，默认关） | 同样准，且**不用配 hook** |
 | 🟢 在跑 / ⚪ 空闲 | 扫进程表，按 (CLI, 目录) 匹配 | 能确定「活着」，不知道它在等什么 |
 | · 已结束 | 会话文件的最后活动时间 | 只反映时间 |
 
-> **诚实说明**：不配 hook、也不走 HRack，面板上就永远不会有橙色的「等你确认」。
+> **诚实说明**：不配 hook、也没接上那条可选的外部事件流，面板上就永远不会有橙色的「等你确认」。
 > 那个信息只有 CLI 自己知道，别指望从文件 mtime 猜出来 ——
 > **猜出来的东西会让你在关键时刻判断错。**
 
@@ -77,7 +77,7 @@
   <img src="assets/architecture.svg" alt="数据流" width="880">
 </div>
 
-四个数据源合并成一张快照，**状态优先级：hook > HRack > 进程 > 文件 mtime**。
+四个数据源合并成一张快照，**状态优先级：hook > 外部事件流 > 进程 > 文件 mtime**。
 越靠前越可信，不会互相覆盖。
 
 ---
@@ -223,8 +223,8 @@ run.cmd --print                            :: 本机状态表格（最快看到�
 python tools\sessions.py --recap           :: 跨项目会话目录（17 毫秒扫完全部）
 python tools\sessions.py drift             :: 哪些会话的记忆已经跟代码对不上了
 python tools\sessions.py html -o a.html    :: 离线 HTML 报告，断网可看
-python -m feishu_hub.hrack                 :: 看 HRack 通道读到了什么
-python tools\smoke_test.py                 :: 292 项离线自检，不联网不建应用
+python -m feishu_hub.feed                  :: 看外部事件流通道接上了什么（可选）
+python tools\smoke_test.py                 :: 296 项离线自检，不联网不建应用
 python tools\card_preview.py               :: 生成 card-preview.html，浏览器打开，按钮能点
 ```
 
@@ -258,16 +258,20 @@ python tools\card_preview.py               :: 生成 card-preview.html，浏览�
 | **打开** | 用 Windows Terminal 在该会话的目录里执行 `grok --resume <id>` 之类的恢复命令 |
 | ‹ 上一页 / 下一页 › | 翻页，每页 10 条 |
 | ⟳ 刷新 | 后台重扫（约 5 秒），扫完自动 PATCH 回来 |
-| 批准 / 拒绝 | 放行卡住的会话（要 `hrack_approve=true`） |
+| 批准 / 拒绝 | 放行卡住的会话（要 `feed_approve=true`，且接了控制管道） |
 
 ---
 
-## HRack 通道：不用配 hook 就有「等你确认」
+## 外部事件流（可选，默认关）：不用配 hook 就有「等你确认」
 
-[HRack](https://github.com/) 是那个多 CLI 会话管理器，它自己**已经在记**哪场卡住了：
+上面那句「不配 hook 就没有橙色」有一个例外：**如果本机已经有一个会话管理器
+自己在记「哪场卡住了」，那就不用你配 hook。**
+
+这是个**通用适配器**，不是为某一家写的。它对接口只提两个要求：
+① 一个 append-only 的 JSONL 事件流水；② 可选的一条命名管道做反向操作。
 
 ```
-%APPDATA%\HRack\events\events.jsonl
+<你在 config.json 里指的 feed_events>
   session_start  detail = 工作目录
   tool_call      正在干活
   blocked        ← 卡在等你批准 / 等你回答
@@ -276,50 +280,51 @@ python tools\card_preview.py               :: 生成 card-preview.html，浏览�
   session_exit   进程退了
 ```
 
-所以只要是 **HRack 拉起的会话**，接上这个通道就有橙色的「等你确认」——
-**不用给任何 CLI 配 hook**。上面那句「不配 hook 就没有橙色」，只适用于你在系统终端里手动开的会话。
+**默认关闭，而且这个仓库里不写死任何路径。** 想接就在 `config.json` 里指过去：
+
+```json
+{
+  "feed_enabled": true,
+  "feed_events": "C:\\某个会话管理器\\events\\events.jsonl",
+  "feed_pipe":   "\\\\.\\pipe\\某个管道名",
+  "feed_token":  "C:\\某个会话管理器\\token"
+}
+```
+
+自检（没配置就直说没配，不会瞎读文件）：
 
 ```cmd
-python -m feishu_hub.hrack
+python -m feishu_hub.feed                    :: 看接上了什么
+python -m feishu_hub.feed --config config.json
 ```
 
-```
-事件流水: OK  C:\Users\admin\AppData\Roaming\HRack\events\events.jsonl
-Bridge   : 已连接  \\.\pipe\hrack-bridge-admin
+### 还能反向操作（控制管道）
 
-HRack 会话 5 场：
-  needs-you  grok      造书成剧   tools=221   0 分钟前
-```
-
-### 还能反向操作（Bridge）
-
-HRack 开了一条**命名管道** `\\.\pipe\hrack-bridge-<用户名>`，token 在 `%APPDATA%\HRack\bridge.token`。
-接上之后就不只是「看」了：
+配了控制管道之后就不只是「看」了：
 
 | 操作 | 走的方法 | 效果 |
 | --- | --- | --- |
-| **批准 / 拒绝** | `session.approve` / `session.deny` | 当场放行那场卡住的会话（要 `hrack_approve=true`） |
+| **批准 / 拒绝** | `session.approve` / `session.deny` | 当场放行那场卡住的会话（要 `feed_approve=true`） |
 | **投喂** | `session.send` | 把一句话**塞进正在跑的那一场**，不是另起进程 |
 
 「投喂」跟无头续跑是**两条不同的路**，别混：
 
-| | 无头续跑 | 投喂（Bridge） |
+| | 无头续跑 | 投喂（控制管道） |
 | --- | --- | --- |
-| 怎么跑 | `remote.py` 另起一个无头进程 | 直接写进 HRack 里活着的那一场 |
+| 怎么跑 | `remote.py` 另起一个无头进程 | 直接写进正在跑的那一场 |
 | 上下文 | 重新加载整段历史，大会话要几分钟 | **连续的**，TUI 里能看到这句话 |
-| 适用 | 所有 CLI | HRack 里跑着的 OpenCode 会话 |
+| 适用 | 所有 CLI | 对端愿意暴露的那些会话 |
 | 覆盖范围 | 另起炉灶，跟 TUI 那场互不相干 | **同一场会话** |
 
-> **HRack 那边的边界**：`sessions.list` 在 HRack 里是**按 `adapterId == 'opencode'` 过滤**的，
-> 所以 grok / codex / claude 的会话拿不到反向操作能力 —— 不是本项目的限制。
-> 事件流那条路不受影响，六个 adapter 全覆盖。
+> **对端的边界不是本项目的限制**：`sessions.list` 返回哪些会话由对端决定
+> （比如只放行 opencode），拿不到别的 adapter 不是 bug。事件流水那条路不受影响。
 
-**信任开关默认关着**：`hrack_approve: false`。
-开着 = 飞书那头点一下就能让你的机器继续执行工具。跟 `remote_auto_approve` 是同一类问题，想清楚再开。
-关着的时候卡片上干脆不摆那两个按钮 —— 摆一个点了只会弹「未开启」的，更烦。
+**信任开关默认关着**：`feed_approve: false`。
+开着 = 飞书那头点一下就能让你的机器继续执行工具。跟 `remote_auto_approve` 是同一类问题，
+想清楚再开。关着的时候卡片上干脆不摆那两个按钮 —— 摆一个点了只会弹「未开启」的，更烦。
 
-**HRack 没开怎么办**：什么都不用做。事件流读不到就静默降级，Bridge 探测到管道不存在也就一句
-`HRack 未运行`，面板照常工作。
+**没配 / 对端没开怎么办**：什么都不用做。没配置时整个模块一次系统调用都不发；
+配了但读不到就静默降级，面板照常工作。
 
 ---
 
@@ -464,7 +469,16 @@ run.cmd
 [ok] 建立飞书长连接（事件 + 卡片回调都走这里，无需公网 IP）...
 ```
 
-### Windows：开始菜单就一个入口
+### 两种跑法：开发用 .cmd，交付用 exe
+
+| | 开发 / 本机自用 | 交付 / 装到别人机器 |
+| --- | --- | --- |
+| 需要 Python | 要（3.10+） | **不要** |
+| 入口 | `start.cmd`（或开始菜单那条快捷方式） | `GrokBuildCenter.exe` |
+| 配置在哪 | 仓库根目录 | **exe 旁边** |
+| 怎么来 | `python tools\make_start_menu.py` | `python tools\build_exe.py` |
+
+#### 开发：开始菜单就一个入口
 
 ```cmd
 python tools\make_icon.py             :: 先生成我们自己的图标（零依赖）
@@ -478,6 +492,16 @@ config.json 没配好  →  体检模式（离线，不需要任何配置）
 config.json 配好了  →  启动飞书面板，飞书里发一张常驻卡片并置顶（窗口别关）
 ```
 
+体检模式跑 5 步，**第 1 步就是会话库** —— 不是先讲飞书：
+
+```
+1/5  Grok 会话库（管理 · 继承 · 恢复）   本机 51 场，按活跃时间列出来 + 每个命令怎么用
+2/5  外部事件流（可选，默认关）           没配置就说没配置，配了才报读到了什么
+3/5  本机会话快照                        面板上会长什么样（不连飞书也能看）
+4/5  自检                                296 项离线检查，扫本机会话库是真机只读
+5/5  历史会话网页                        生成单文件 HTML 并直接打开（可搜索、可复制续跑命令）
+```
+
 判断是 `tools/config_ready.py` 读 `config.json` 做的，不是问你。
 想强制走某一种：`start.cmd --check` / `start.cmd --panel`。
 
@@ -487,11 +511,71 @@ config.json 配好了  →  启动飞书面板，飞书里发一张常驻卡片�
 > 顺带两个一起踩会死得更难看：**`.cmd` 必须是 CRLF**，LF 会让 cmd 把行切碎，
 > 报一堆「不是内部或外部命令」。仓库里 `.gitattributes` 已经钉死了这条。
 
+#### 交付：一个 exe + 一个安装包
+
+```cmd
+python tools\build_exe.py               :: 全打，约 2.5 分钟
+python tools\build_exe.py --app         :: 只打主程序（调 UI 时够用，省一半时间）
+python tools\build_exe.py --setup-only  :: 只改了 installer\ 的话用这个（30 秒）
+```
+
+产出三样，都在 `dist\`：
+
+| 产物 | 体积 | 怎么用 |
+| --- | --- | --- |
+| `GrokBuildCenter\GrokBuildCenter.exe` | 21 MB | 免安装：整个目录拷走就能跑 |
+| `GrokBuildCenter-Setup.exe` | 43 MB | 安装包：双击就装，也能静默 |
+| `GrokBuildCenter-portable.zip` | 35 MB | 上面那个目录的压缩包，方便传 |
+
+**装机版不要管理员**：默认装到用户目录，卸载登记写 HKCU，所以「设置 → 应用」里看得到、卸得掉。
+刻意不装 Program Files —— 那要 UAC 提权，而这工具是单人用的，`config.json` 就在程序目录里更好改。
+
+安装包支持静默：
+
+```cmd
+GrokBuildCenter-Setup.exe --silent                        :: 默认目录，不问任何问题
+GrokBuildCenter-Setup.exe --silent --dir D:\tools\gbc      :: 指定目录
+GrokBuildCenter-Setup.exe --silent --no-shortcuts         :: 不建快捷方式
+```
+
+**配置在 exe 旁边，不在包里。** 打包后 `paths.data_root()` 就是 exe 所在目录，装完长这样：
+
+```
+%LOCALAPPDATA%\Programs\Grok Build Center\
+├─ GrokBuildCenter.exe      主程序
+├─ config.json.example      复制成 config.json 再填
+├─ uninstall.exe            卸载（也可以在「设置 → 应用」里卸）
+└─ _internal\               Python 运行库 + assets（PyInstaller 的目录布局）
+```
+
+想整体挪走、或者当便携版用：设环境变量 `GROKBUILD_HOME` 指到别处即可。
+
+exe 的子命令跟 `.cmd` 那套一一对应（少了一步 `4/5 自检`，那个是给开发者的，单独有 `doctor`）：
+
+```cmd
+GrokBuildCenter.exe                 自动判断：没配飞书 → 体检；配好了 → 面板
+GrokBuildCenter.exe check           离线体检（4 步）
+GrokBuildCenter.exe panel           启动飞书面板
+GrokBuildCenter.exe history         生成可搜索的历史会话网页并打开
+GrokBuildCenter.exe sessions list   会话管理，跟 tools\sessions.py 同一套命令
+GrokBuildCenter.exe doctor          296 项离线自检
+GrokBuildCenter.exe version         版本与目录（排查「配置到底读的哪儿」最有用）
+```
+
+> **打包必须用项目自带的 `.venv`**：PyInstaller 会把**当前解释器里装的东西**一起打进去。
+> 用系统 python 打出来的包会缺 `lark-oapi`（面板要它），装到别人机器上第一句 `import` 就崩。
+> `build_exe.py` 已经硬指 `.venv\Scripts\python.exe`，没有就警告。
+>
+> 另外两个实测踩过的坑，都写进代码注释了：**`--add-data` 的东西会落在 `_internal\` 里**，
+> 不在 exe 旁边（安装器找图标、找 `config.json.example` 都得看那儿）；
+> **`--setup-only` 必须连卸载器一起重打**，否则装出来的包带着上一次编进去的旧卸载逻辑 ——
+> 这次就是被这个坑到，装完注册表删不掉。
+
 ---
 
 ## 第三步：配 hook（可选，但强烈建议）
 
-不配 hook 就**只有 HRack 拉起的会话**有「等你确认」。配了之后，任何 CLI 卡住都会：
+不配 hook 就**只有接了外部事件流、由它拉起的会话**有「等你确认」。配了之后，任何 CLI 卡住都会：
 
 1. 面板上那一条变成橙色 🟠 并排到最前面，多维表格里状态同步变成「等你确认」
 2. 飞书主动推一条「有会话在等你」（同一个会话 5 分钟内只推一次，不刷屏）
@@ -517,6 +601,7 @@ python tools\report.py --cli grok  --status done
 grok-build-center/
 ├─ run.cmd                    一键启动
 ├─ start.cmd                  Windows 开始菜单入口（自动判断体检 / 面板）
+├─ offline-check.cmd          体检模式本体：5 步，离线可跑（纯 ASCII + CRLF）
 ├─ config.json.example        配置模板（复制成 config.json）
 ├─ requirements.txt
 ├─ assets/                    品牌资产（SVG 自适应明暗 + prompts.json）
@@ -526,20 +611,28 @@ grok-build-center/
 │  ├─ scan.py                 扫本机各家 CLI 的会话库 → 统一记录
 │  ├─ procs.py                扫存活进程，按 (CLI, 目录) 匹配
 │  ├─ groksessions.py         ★ Grok 会话深索引：管理 / 分叉 / 接续 / 漂移 / 体检
-│  ├─ hrack.py                ★ HRack 通道：事件流 + Bridge 命名管道
-│  ├─ state.py                历史 + 进程 + HRack + hook 四源合并成统一快照
+│  ├─ feed.py                 ★ 外部事件流通道（可选，默认关）：事件流水 + 控制管道
+│  ├─ state.py                历史 + 进程 + 外部事件流 + hook 四源合并成统一快照
+│  ├─ paths.py                data_root / bundle_root —— 打包后这俩不是一个地方
 │  ├─ cards.py                飞书卡片 JSON 2.0 构造
 │  ├─ bitable.py              多维表格：建表 / 增量同步 / 索引重建
 │  ├─ feishu.py               发卡片 / PATCH 卡片 / 长连接
 │  ├─ launch.py               恢复会话（Windows Terminal）+ 参数校验
 │  ├─ remote.py               无头续跑 + 会话正文读取
 │  └─ hub.py                  主程序：面板发布、回调分发、hook 端点、后台刷新
+├─ installer/
+│  ├─ setup_main.py           安装程序（装用户目录 / 不要管理员 / 写 HKCU 卸载登记）
+│  └─ uninstall_main.py       卸载程序（自删目录靠一个 ASCII+CRLF 的临时 .cmd）
 └─ tools/
+   ├─ app.py                  ★ 打包后的统一入口（.cmd 那套的 exe 等价物）
+   ├─ build_exe.py            ★ 打包：主程序 + 卸载器 + 安装包 + zip
    ├─ setup.py                一键安装向导（建表 / 拿 id / 写配置）
    ├─ sessions.py             ★ 会话命令行：list / search / recover / fork / handoff / drift / html
    ├─ sessions_html.py        ★ 离线 HTML 报告渲染（零外链）
-   ├─ smoke_test.py           292 项离线冒烟测试，不联网不建应用
+   ├─ smoke_test.py           296 项离线冒烟测试，不联网不建应用
+   ├─ banner.py               .cmd 要打的中文都在这儿（.cmd 里只能写 ASCII）
    ├─ make_icon.py            生成自己的图标（纯 Python，零依赖）
+   ├─ make_lnk.py             建 Windows 快捷方式（走 Shell COM，不手写二进制）
    ├─ make_start_menu.py      装 / 卸 Windows 开始菜单入口
    ├─ gen_assets.py           用 gpt-image-2 批量出视觉资产
    ├─ gh_push.py              github.com 被墙时走 API 推送（并复刻 commit SHA）
@@ -559,10 +652,10 @@ grok-build-center/
 python tools\smoke_test.py
 ```
 
-**292 项检查，不联网、不建飞书应用**，把整条链路跑一遍：
+**296 项检查，不联网、不建飞书应用**，把整条链路跑一遍：
 
 - 快照 / 卡片发布 / 筛选分页 / 卡片回调 / hook 端点 / 参数校验
-- **HRack 通道**：6 种事件、状态迁移、增量读、压缩重写后重读、坏行跳过、快照合并优先级、僵尸进程
+- **外部事件流通道**（可选，默认关）：6 种事件、状态迁移、增量读、压缩重写后重读、坏行跳过、快照合并优先级、僵尸进程
 - **多维表格同步的幂等性** —— 这块写错会把 343 行反复插成双份，而且不报错，
   只会在表里慢慢堆垃圾。所以单独测了：原样重同步 0 新增 0 更新、只推变化行、
   会话消失删行、本地索引丢了从表里读回不重插、超批量上限自动分批

@@ -283,7 +283,7 @@ READERS = {
     "opencode": _read_opencode,
 }
 
-# 能走「无头续跑」的 CLI。kimi / pi 不在这里 —— 它们靠 HRack Bridge 投喂，
+# 能走「无头续跑」的 CLI。kimi / pi 不在这里 —— 它们靠控制管道投喂，
 # 别混进同一条路：这条是另起一个进程，那场活着的会话根本收不到。
 HEADLESS_CLIS = ("grok", "codex", "claude", "opencode", "gemini", "kimi", "pi")
 
@@ -399,7 +399,7 @@ def build_argv(cli: str, sid: str, cwd: str, prompt: str, auto_approve: bool = F
         raise RemoteError(
             f"不支持无头续跑: {cli!r}"
             f"（能续跑 {', '.join(HEADLESS_CLIS)}；"
-            f"HRack 的 kimi/pi 请用面板上的「投喂」走 Bridge，别走这条）"
+            f"外部管理器的 kimi/pi 请用面板上的「投喂」走控制管道，别走这条）"
         )
     return argv
 

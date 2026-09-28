@@ -40,7 +40,7 @@
     <text x="48" y="78" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11.5" class="d">grok / codex / claude 内置 hook</text>
 
     <rect class="box" x="32" y="102" width="236" height="54" rx="10"/>
-    <text x="48" y="126" font-family="ui-sans-serif, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif" font-size="14" font-weight="600" class="t">HRack 事件流</text>
+    <text x="48" y="126" font-family="ui-sans-serif, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif" font-size="14" font-weight="600" class="t">外部事件流</text>
     <text x="48" y="144" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11.5" class="d">events.jsonl + Bridge 管道</text>
 
     <rect class="box" x="32" y="168" width="236" height="54" rx="10"/>
@@ -90,5 +90,5 @@
   <rect class="hair" x="32" y="306" width="816" height="1"/>
   <text x="32" y="330" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="12" class="d">状态优先级：</text>
   <text x="140" y="330" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="12" class="k">hook</text>
-  <text x="184" y="330" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="12" class="d">&gt; HRack &gt; 进程 &gt; 文件 mtime　—— 越靠前越可信，不会互相覆盖</text>
+  <text x="184" y="330" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="12" class="d">&gt; 事件流 &gt; 进程 &gt; 文件 mtime　—— 越靠前越可信，不会互相覆盖</text>
 </svg>
