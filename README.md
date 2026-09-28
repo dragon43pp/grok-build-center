@@ -405,6 +405,7 @@ grok-build-pager/
    ├─ make_icon.py            生成自己的图标（纯 Python，零依赖）
    ├─ make_start_menu.py      装 / 卸 Windows 开始菜单入口
    ├─ gen_assets.py           用 gpt-image-2 批量出视觉资产
+   ├─ gh_push.py              github.com 被墙时走 API 推送（并复刻 commit SHA）
    ├─ card_preview.py         渲染卡片为可点的 HTML
    ├─ whoami.py               拿 open_id / chat_id
    └─ report.py               CLI hook 上报器（只用标准库）
