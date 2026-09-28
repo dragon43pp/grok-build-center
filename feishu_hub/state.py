@@ -218,8 +218,32 @@ class Snapshot:
         return len(self.sessions)
 
 
+def render_table(snap: Snapshot) -> str:
+    """把快照渲染成「本机现在长什么样」那段纯文本。
+
+    住在 state.py 而不是 hub.py，是为了让**体检那条路不碰 hub** ——
+    hub 顶上导入了飞书 SDK（bitable / feishu），光 import 就要 5.7 秒。
+    体检明说了「不需要任何配置」，不该为一个不用的 SDK 罚站 5.7 秒。
+    """
+    lines = [
+        f"共 {snap.total} 场会话 · 存活进程 {snap.live_procs}",
+        "按 CLI: " + str(snap.counts_by_cli),
+        "按状态: " + str({STATUS_LABEL.get(k, k): v for k, v in snap.counts_by_status.items()}),
+        "",
+        f"{'状态':<10}{'CLI':<10}{'项目':<26}{'标题':<36}最后",
+        "-" * 112,
+    ]
+    for s in snap.sessions[:25]:
+        lines.append(f"{STATUS_LABEL[s.status]:<10}{s.cli:<10}"
+                     f"{s.project[:25]:<26}{s.title[:35]:<36}{s.last_str}")
+    if snap.total > 25:
+        lines.append(f"... 另有 {snap.total - 25} 场")
+    return "\n".join(lines)
+
+
 def build_snapshot(hooks: HookStore | None = None,
-                   feed: FeedState | None = None) -> Snapshot:
+                   feed: FeedState | None = None,
+                   progress=None) -> Snapshot:
     """合成统一快照。
 
     状态优先级：**hook > 外部事件流 > 进程 > 文件时间**。
@@ -228,7 +252,7 @@ def build_snapshot(hooks: HookStore | None = None,
     而 `blocked` 事件能说「活着并且卡在等你批准」。
     反过来事件流不知道的（比如你在系统终端里手动开的 codex），进程表还能兜住。
     """
-    records, _stats = build_records()
+    records, _stats = build_records(progress=progress)
     live = procs.scan_live()
     hooks = hooks or HookStore()
     feed = feed or FeedState()

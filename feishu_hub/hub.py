@@ -37,7 +37,7 @@ from . import cards, feed, launch, paths, procs, remote
 from .bitable import BitableError, BitableSync
 from .feishu import FeishuClient, FeishuError, build_dispatcher, run_ws
 from .feed import ControlError, FeedLink, FeedState
-from .state import STATUS_LABEL, HookStore, Session, Snapshot, build_snapshot
+from .state import STATUS_LABEL, HookStore, Session, Snapshot, build_snapshot, render_table
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 # 可写状态（config.json / panel.json / bitable-state.json）放哪。
@@ -768,16 +768,8 @@ class Hub:
 # --------------------------------------------------------------------- CLI
 
 def print_table(snap: Snapshot) -> None:
-    print(f"共 {snap.total} 场会话 · 存活进程 {snap.live_procs}")
-    print("按 CLI:", snap.counts_by_cli)
-    print("按状态:", {STATUS_LABEL.get(k, k): v for k, v in snap.counts_by_status.items()})
-    print()
-    print(f"{'状态':<10}{'CLI':<10}{'项目':<26}{'标题':<36}最后")
-    print("-" * 112)
-    for s in snap.sessions[:25]:
-        print(f"{STATUS_LABEL[s.status]:<10}{s.cli:<10}{s.project[:25]:<26}{s.title[:35]:<36}{s.last_str}")
-    if snap.total > 25:
-        print(f"... 另有 {snap.total - 25} 场")
+    # 正文搬到 state.render_table 了（体检那条路不能碰 hub，见那里的注释）
+    print(render_table(snap))
 
 
 def main(argv: list[str] | None = None) -> int:

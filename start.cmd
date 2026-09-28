@@ -14,7 +14,7 @@ rem  Routes automatically:
 rem    config.json not ready -> offline check (needs no config)
 rem    config.json ready     -> start the Feishu panel
 rem
-rem  Force one:  start.cmd --check   /   start.cmd --panel
+rem  Force one:  start.cmd --check   /   --panel   /   --ui
 rem ============================================================
 
 set "HERE=%~dp0"
@@ -28,6 +28,7 @@ if not exist "%PY%" set "PY=python"
 set "MODE="
 if /i "%~1"=="--check" set "MODE=check"
 if /i "%~1"=="--panel" set "MODE=panel"
+if /i "%~1"=="--ui" set "MODE=ui"
 
 if "%MODE%"=="" (
   "%PY%" tools\config_ready.py
@@ -37,6 +38,12 @@ if "%MODE%"=="" (
 if "%MODE%"=="check" (
   "%PY%" tools\banner.py check
   call "%HERE%offline-check.cmd"
+  endlocal & exit /b %errorlevel%
+)
+
+if "%MODE%"=="ui" (
+  rem Browser-based control panel: one button, no black window.
+  "%PY%" -m feishu_hub.ui
   endlocal & exit /b %errorlevel%
 )
 

@@ -41,24 +41,30 @@ def install_dir() -> str:
 
 
 def kill_running() -> int:
-    """先把别的 GrokBuildCenter.exe 收掉，不然文件被占着删不掉。"""
+    """把本程序的进程收掉，不然文件被占着删不掉。
+
+    两个都要收：`GrokBuildCenter.exe` 是图形前台（双击那个），
+    `GrokBuildCenter-cli.exe` 是命令行那个。前台还开着的时候卸载，
+    最容易「卸了一半」——目录删不掉，但快捷方式和注册表已经没了。
+    """
     me = os.getpid()
-    out = subprocess.run(
-        ["tasklist", "/FI", "IMAGENAME eq GrokBuildCenter.exe", "/FO", "CSV", "/NH"],
-        capture_output=True, text=True, errors="replace")
     killed = 0
-    for line in out.stdout.splitlines():
-        parts = [p.strip('"') for p in line.split('","')]
-        if len(parts) < 2 or parts[0] != "GrokBuildCenter.exe":
-            continue
-        try:
-            pid = int(parts[1])
-        except ValueError:
-            continue
-        if pid == me:
-            continue
-        subprocess.run(["taskkill", "/PID", str(pid), "/F"], capture_output=True)
-        killed += 1
+    for image in ("GrokBuildCenter.exe", "GrokBuildCenter-cli.exe"):
+        out = subprocess.run(
+            ["tasklist", "/FI", f"IMAGENAME eq {image}", "/FO", "CSV", "/NH"],
+            capture_output=True, text=True, errors="replace")
+        for line in out.stdout.splitlines():
+            parts = [p.strip('"') for p in line.split('","')]
+            if len(parts) < 2 or parts[0] != image:
+                continue
+            try:
+                pid = int(parts[1])
+            except ValueError:
+                continue
+            if pid == me:
+                continue
+            subprocess.run(["taskkill", "/PID", str(pid), "/F"], capture_output=True)
+            killed += 1
     return killed
 
 

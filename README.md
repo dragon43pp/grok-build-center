@@ -219,33 +219,37 @@ run.cmd                      :: 启动
 飞书是**可选的外挂**，不是前提。这几条全离线：
 
 ```cmd
+python -m feishu_hub.ui                    :: 图形前台：本地面板 + 一个大按钮，点一下就出网页
 run.cmd --print                            :: 本机状态表格（最快看到效果的一条）
 python tools\sessions.py --recap           :: 跨项目会话目录（17 毫秒扫完全部）
 python tools\sessions.py drift             :: 哪些会话的记忆已经跟代码对不上了
 python tools\sessions.py html -o a.html    :: 离线 HTML 报告，断网可看
 python -m feishu_hub.feed                  :: 看外部事件流通道接上了什么（可选）
-python tools\smoke_test.py                 :: 296 项离线自检，不联网不建应用
+python tools\smoke_test.py                 :: 338 项离线自检，不联网不建应用
 python tools\card_preview.py               :: 生成 card-preview.html，浏览器打开，按钮能点
 ```
 
-**先跑 `run.cmd --print`。** 它不联网、不需要任何配置，
+**装了安装包的人只需双击图标**（走的就是第一行那个图形前台），
+然后在浏览器里点「开始扫描」—— 不用开终端、不用记命令、不会看到黑窗口。
+
+**从源码跑的人先跑 `run.cmd --print`。** 它不联网、不需要任何配置，
 直接把本机所有会话和状态列出来。看到这张表，你就知道这东西值不值得配飞书。
 
 ---
 
-## 三个界面，各管一段
+## 五个界面，各管一段
 
-| | **终端 / `--print`** | **飞书常驻卡片** | **飞书多维表格** |
-| --- | --- | --- | --- |
-| 定位 | 本机一眼看 | 手机上看 + 当场动手 | 完整清单 |
-| 放什么 | 全部会话 | 最要紧的几条 | 全部会话，15 列 |
-| 能干什么 | 看状态、看目录 | 筛选 / 详情 / 打开 / 投喂 | 原生筛选 / 排序 / 搜索 / 分组，**可分享** |
-| 翻页 | 一屏 | 一页 10 条 | 无限滚 |
+| | **图形前台** | **终端 / `--print`** | **飞书常驻卡片** | **飞书多维表格** |
+| --- | --- | --- | --- | --- |
+| 定位 | 新手入口 / 一键扫描 | 本机一眼看 | 手机上看 + 当场动手 | 完整清单 |
+| 放什么 | 扫描进度 + 统计 | 全部会话 | 最要紧的几条 | 全部会话，15 列 |
+| 能干什么 | 扫描 · 另存 · 打开 | 看状态、看目录 | 筛选 / 详情 / 打开 / 投喂 | 原生筛选 / 排序 / 搜索 / 分组，**可分享** |
+| 翻页 | — | 一屏 | 一页 10 条 | 无限滚 |
 
 几百场会话在卡片上要翻几十页，手机上点到手酸。所以**表格才是「看全部」的地方**，
-卡片负责「现在哪几件要紧事 + 一键回到现场」。**两个都免费。**
+卡片负责「现在哪几件要紧事 + 一键回到现场」。**都免费。**
 
-第四个视图是**离线 HTML 报告**（`python tools\sessions.py html`）——
+第五个视图是**离线 HTML 报告**（`python tools\sessions.py html`）——
 它不是「现在」，而是「这些日子」：全部项目、全部会话一页摊开，带搜索框，断网也能看。
 飞书卡片有 30 KB 上限、多维表格要联网，只有它能塞进邮件附件发给别人。
 
@@ -474,7 +478,8 @@ run.cmd
 | | 开发 / 本机自用 | 交付 / 装到别人机器 |
 | --- | --- | --- |
 | 需要 Python | 要（3.10+） | **不要** |
-| 入口 | `start.cmd`（或开始菜单那条快捷方式） | `GrokBuildCenter.exe` |
+| 入口 | `start.cmd`（或开始菜单那条快捷方式） | `GrokBuildCenter.exe`（双击） |
+| 界面 | 控制台 | **图形前台**（浏览器里的一个面板） |
 | 配置在哪 | 仓库根目录 | **exe 旁边** |
 | 怎么来 | `python tools\make_start_menu.py` | `python tools\build_exe.py` |
 
@@ -498,7 +503,7 @@ config.json 配好了  →  启动飞书面板，飞书里发一张常驻卡片�
 1/5  Grok 会话库（管理 · 继承 · 恢复）   本机 51 场，按活跃时间列出来 + 每个命令怎么用
 2/5  外部事件流（可选，默认关）           没配置就说没配置，配了才报读到了什么
 3/5  本机会话快照                        面板上会长什么样（不连飞书也能看）
-4/5  自检                                296 项离线检查，扫本机会话库是真机只读
+4/5  自检                                338 项离线检查，扫本机会话库是真机只读
 5/5  历史会话网页                        生成单文件 HTML 并直接打开（可搜索、可复制续跑命令）
 ```
 
@@ -511,10 +516,38 @@ config.json 配好了  →  启动飞书面板，飞书里发一张常驻卡片�
 > 顺带两个一起踩会死得更难看：**`.cmd` 必须是 CRLF**，LF 会让 cmd 把行切碎，
 > 报一堆「不是内部或外部命令」。仓库里 `.gitattributes` 已经钉死了这条。
 
-#### 交付：一个 exe + 一个安装包
+#### 交付：双击就进图形前台
+
+拿到安装包的人**不需要知道命令行**。双击图标，浏览器里出来一个面板，上面一个大按钮：
+
+<p align="center">
+  <img src="docs/panel-scan.png" width="46%" alt="扫描中：按钮退到灰蓝，只有正在跑的那颗灯在发光">
+  <img src="docs/panel-result.png" width="46%" alt="扫完：四步全绿 + 各家场次统计 + 另存为">
+</p>
+
+左边是**扫描中**，右边是**扫完**。注意左边那个状态 —— 按品牌铁律
+「一张图里只有一颗灯是亮的」，一开扫按钮就主动退到灰蓝，把唯一那点光让给
+正在跑的那一步。不是装饰，是「现在该看哪儿」的唯一信号。
+
+扫完自动把网页打开，统计卡片留在面板上，还有一个**另存为…**把 HTML 存到你挑的地方。
+「打开所在文件夹」直接把产物亮在资源管理器里。
+
+为什么用浏览器当界面而不是 tkinter：**打包用的 Python 没有 `_tkinter`**
+（见下面那条），而这个产品本来就是 HTML/CSS 的 —— 用标准库 `http.server`
+起一个只监听 `127.0.0.1` 的小服务，**一个新依赖都不用加**，顺手还能直接把
+生成好的网页喂给同源的前端（躲开 `file://` 的一堆限制）。
+
+几条边界，都是刻意做的：
+
+- **只监听回环地址**，并且校验 `Host` 头 —— 否则 DNS rebinding 能把本地面板露出去
+- 改状态的接口（`/api/scan`、`/api/quit`）校验 `Origin`
+- 端口固定 `8770`；**已经有一个在跑就只把浏览器叫过去**，不重复起
+- 页面关掉后最多再活 30 分钟就自己退，不留后台进程（`--idle` 可调）
+
+#### 打包：两个 exe + 一个安装包
 
 ```cmd
-python tools\build_exe.py               :: 全打，约 2.5 分钟
+python tools\build_exe.py               :: 全打，约 3 分钟
 python tools\build_exe.py --app         :: 只打主程序（调 UI 时够用，省一半时间）
 python tools\build_exe.py --setup-only  :: 只改了 installer\ 的话用这个（30 秒）
 ```
@@ -523,9 +556,35 @@ python tools\build_exe.py --setup-only  :: 只改了 installer\ 的话用这个�
 
 | 产物 | 体积 | 怎么用 |
 | --- | --- | --- |
-| `GrokBuildCenter\GrokBuildCenter.exe` | 21 MB | 免安装：整个目录拷走就能跑 |
-| `GrokBuildCenter-Setup.exe` | 43 MB | 安装包：双击就装，也能静默 |
-| `GrokBuildCenter-portable.zip` | 35 MB | 上面那个目录的压缩包，方便传 |
+| `GrokBuildCenter\`（整个目录） | 60 MB | 免安装：整个目录拷走就能跑 |
+| `GrokBuildCenter-Setup.exe` | 59 MB | 安装包：双击就装，也能静默 |
+| `GrokBuildCenter-portable.zip` | 50 MB | 上面那个目录的压缩包，方便传 |
+
+**为什么是两个 exe，不是一个**：
+
+Windows 的图形界面和命令行是两套子系统（GUI / CUI），**一个 exe 只能选一个**。
+选 GUI，命令行里的输出就没人接（GUI 程序压根没有控制台）；
+选 CUI，双击就永远有个黑窗口杵在那儿 —— 那正是要解决的问题。
+
+所以两个都要，各司其职：
+
+| exe | 子系统 | 谁用 |
+| --- | --- | --- |
+| `GrokBuildCenter.exe` | GUI | **双击**。图形前台，全程没有黑窗口 |
+| `GrokBuildCenter-cli.exe` | CUI | **敲命令**。README 里那一串子命令 |
+
+它们**共用同一份 `_internal`**（`build_exe.py` 生成 `.spec`，用 `COLLECT` 同时收两个
+`EXE(exclude_binaries=True)` —— PyInstaller 的命令行做不到这件事，这是必须用 spec 的唯一理由）。
+
+图形版收到子命令会**自动转交**给命令行版（`tools/app.py::_relaunch_cli`），
+所以别人敲 `GrokBuildCenter.exe check` 也不会一片空白 —— 只是会另开一个控制台窗口。
+
+> 代价是体积：PyInstaller 会把那个 18 MB 的 PYZ 塞进**每一个** exe，
+> 所以目录从 40 MB 变成 60 MB。刻意接受 —— 反过来省这 20 MB，要么让双击出黑窗口，
+> 要么让命令行没输出，两个都不划算。
+> （真想瘦，正路是收窄 `lark_oapi` 的 `collect_submodules`：它一个人就贡献了 102 MB 源码 /
+> 10727 个 .py，而面板实际只用到 `im` 和 `bitable` 两个子包。但那是动态 import 的重灾区，
+> 没有真凭证测不全，宁可先胖着。）
 
 **装机版不要管理员**：默认装到用户目录，卸载登记写 HKCU，所以「设置 → 应用」里看得到、卸得掉。
 刻意不装 Program Files —— 那要 UAC 提权，而这工具是单人用的，`config.json` 就在程序目录里更好改。
@@ -542,7 +601,9 @@ GrokBuildCenter-Setup.exe --silent --no-shortcuts         :: 不建快捷方式
 
 ```
 %LOCALAPPDATA%\Programs\Grok Build Center\
-├─ GrokBuildCenter.exe      主程序
+├─ GrokBuildCenter.exe      图形前台 —— 双击这个
+├─ GrokBuildCenter-cli.exe  命令行版 —— README 里那些命令用这个
+├─ README.md                说明书（面板右下角那个链接也是开它）
 ├─ config.json.example      复制成 config.json 再填
 ├─ uninstall.exe            卸载（也可以在「设置 → 应用」里卸）
 └─ _internal\               Python 运行库 + assets（PyInstaller 的目录布局）
@@ -550,26 +611,34 @@ GrokBuildCenter-Setup.exe --silent --no-shortcuts         :: 不建快捷方式
 
 想整体挪走、或者当便携版用：设环境变量 `GROKBUILD_HOME` 指到别处即可。
 
-exe 的子命令跟 `.cmd` 那套一一对应（少了一步 `4/5 自检`，那个是给开发者的，单独有 `doctor`）：
+命令行版的子命令跟 `.cmd` 那套一一对应（少了一步 `4/5 自检`，那个是给开发者的，单独有 `doctor`）：
 
 ```cmd
-GrokBuildCenter.exe                 自动判断：没配飞书 → 体检；配好了 → 面板
-GrokBuildCenter.exe check           离线体检（4 步）
-GrokBuildCenter.exe panel           启动飞书面板
-GrokBuildCenter.exe history         生成可搜索的历史会话网页并打开
-GrokBuildCenter.exe sessions list   会话管理，跟 tools\sessions.py 同一套命令
-GrokBuildCenter.exe doctor          296 项离线自检
-GrokBuildCenter.exe version         版本与目录（排查「配置到底读的哪儿」最有用）
+GrokBuildCenter-cli.exe                 自动判断：没配飞书 → 体检；配好了 → 面板
+GrokBuildCenter-cli.exe ui              开图形前台（想从命令行开的时候用）
+GrokBuildCenter-cli.exe check           离线体检（4 步）
+GrokBuildCenter-cli.exe panel           启动飞书面板
+GrokBuildCenter-cli.exe history         生成可搜索的历史会话网页并打开
+GrokBuildCenter-cli.exe sessions list   会话管理，跟 tools\sessions.py 同一套命令
+GrokBuildCenter-cli.exe doctor          338 项离线自检
+GrokBuildCenter-cli.exe version         版本与目录（排查「配置到底读的哪儿」最有用）
 ```
 
 > **打包必须用项目自带的 `.venv`**：PyInstaller 会把**当前解释器里装的东西**一起打进去。
 > 用系统 python 打出来的包会缺 `lark-oapi`（面板要它），装到别人机器上第一句 `import` 就崩。
 > `build_exe.py` 已经硬指 `.venv\Scripts\python.exe`，没有就警告。
 >
-> 另外两个实测踩过的坑，都写进代码注释了：**`--add-data` 的东西会落在 `_internal\` 里**，
+> **别指望 tkinter**：`.venv` 建在托管版 Python 3.13.12 上，它**没带 `_tkinter`**，
+> 而 PyInstaller 只能打包运行解释器里有的东西 —— 原生窗口这条路直接封死。
+> 换系统那个 3.12 又装不了 `tools/wheels/` 里的 cp313 wheel（`websockets`、`charset_normalizer`），
+> 所以最后选了「浏览器当界面」。
+>
+> 另外三个实测踩过的坑，都写进代码注释了：**`--add-data` 的东西会落在 `_internal\` 里**，
 > 不在 exe 旁边（安装器找图标、找 `config.json.example` 都得看那儿）；
 > **`--setup-only` 必须连卸载器一起重打**，否则装出来的包带着上一次编进去的旧卸载逻辑 ——
-> 这次就是被这个坑到，装完注册表删不掉。
+> 这次就是被这个坑到，装完注册表删不掉；
+> **图形版 exe 的 `sys.stdout` 是 `None`**，一句 `print` 就是 `AttributeError` 炸全流程，
+> 所以 `tools/app.py::force_utf8` 会先试着从 fd 1 把流接回来，接不回来就扔垃圾桶。
 
 ---
 
@@ -608,6 +677,8 @@ grok-build-center/
 │  └─ icon/                   自己的应用图标（.ico + 各尺寸 png）
 ├─ docs/brand.md              设计规范（改视觉前先读）
 ├─ feishu_hub/
+│  ├─ ui.py                   ★ 图形前台：本地控制台（http.server）+ 面板页面
+│  ├─ flow.py                 ★ 体检那 4 步 —— 命令行和图形前台共用这一份
 │  ├─ scan.py                 扫本机各家 CLI 的会话库 → 统一记录
 │  ├─ procs.py                扫存活进程，按 (CLI, 目录) 匹配
 │  ├─ groksessions.py         ★ Grok 会话深索引：管理 / 分叉 / 接续 / 漂移 / 体检
@@ -624,12 +695,12 @@ grok-build-center/
 │  ├─ setup_main.py           安装程序（装用户目录 / 不要管理员 / 写 HKCU 卸载登记）
 │  └─ uninstall_main.py       卸载程序（自删目录靠一个 ASCII+CRLF 的临时 .cmd）
 └─ tools/
-   ├─ app.py                  ★ 打包后的统一入口（.cmd 那套的 exe 等价物）
-   ├─ build_exe.py            ★ 打包：主程序 + 卸载器 + 安装包 + zip
+   ├─ app.py                  ★ 打包后的统一入口（.cmd 那套的 exe 等价物，双 exe 的分诊台）
+   ├─ build_exe.py            ★ 打包：生成 .spec → 两个 exe + 卸载器 + 安装包 + zip
    ├─ setup.py                一键安装向导（建表 / 拿 id / 写配置）
    ├─ sessions.py             ★ 会话命令行：list / search / recover / fork / handoff / drift / html
    ├─ sessions_html.py        ★ 离线 HTML 报告渲染（零外链）
-   ├─ smoke_test.py           296 项离线冒烟测试，不联网不建应用
+   ├─ smoke_test.py           338 项离线冒烟测试，不联网不建应用
    ├─ banner.py               .cmd 要打的中文都在这儿（.cmd 里只能写 ASCII）
    ├─ make_icon.py            生成自己的图标（纯 Python，零依赖）
    ├─ make_lnk.py             建 Windows 快捷方式（走 Shell COM，不手写二进制）
@@ -652,7 +723,7 @@ grok-build-center/
 python tools\smoke_test.py
 ```
 
-**296 项检查，不联网、不建飞书应用**，把整条链路跑一遍：
+**338 项检查，不联网、不建飞书应用**，把整条链路跑一遍：
 
 - 快照 / 卡片发布 / 筛选分页 / 卡片回调 / hook 端点 / 参数校验
 - **外部事件流通道**（可选，默认关）：6 种事件、状态迁移、增量读、压缩重写后重读、坏行跳过、快照合并优先级、僵尸进程

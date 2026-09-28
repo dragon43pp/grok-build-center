@@ -36,11 +36,27 @@ import time
 
 APP_NAME = "Grok Build Center"
 APP_ID = "GrokBuildCenter"
-VERSION = "1.0.0"
 EXE_NAME = "GrokBuildCenter.exe"
+CLI_EXE_NAME = "GrokBuildCenter-cli.exe"
 UNINST_EXE = "uninstall.exe"
 PUBLISHER = "dragon43pp"
 HOMEPAGE = "https://github.com/dragon43pp/grok-build-center"
+
+
+def _version() -> str:
+    """版本号只有一处定义（feishu_hub/__init__.py）。
+
+    安装包自己写一份的后果很具体：装完之后 `version` 打印的是新版，
+    而「添加或删除程序」里还挂着旧版号 —— 用户会以为没装上。
+    """
+    try:
+        from feishu_hub import __version__
+        return __version__
+    except Exception:
+        return "0.0.0"
+
+
+VERSION = _version()
 
 UNINST_KEY = ("Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\"
               + APP_ID)

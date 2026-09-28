@@ -1273,6 +1273,163 @@ def test_session_store() -> None:
         shutil.rmtree(tmp, ignore_errors=True)
 
 
+def test_ui_panel() -> None:
+    """[44] 图形前台：页面、接口、边界。
+
+    这里**故意不真跑一次扫描** —— 一次要 20 秒，冒烟测试不该那么慢。
+    扫描本身在 [35]/[42]/[43] 里已经分头验证过了，这里只管「门」开不开得对。
+    """
+    from feishu_hub import flow, ui
+
+    print("\n[44] 图形前台：本地控制台（只监听回环）")
+
+    # ---- 页面本身 ----
+    check("页面里有那个按钮", "开始扫描" in ui.HTML)
+    check("按钮是珊瑚色（品牌色就是它）", "--coral:#FF6B4A" in ui.HTML)
+    # 品牌铁律「一张图里只有一颗灯是亮的」：辉光只给正在跑的那颗灯
+    glow = [ln for ln in ui.HTML.splitlines() if ".lamp" in ln and "box-shadow" in ln]
+    check("只有「正在跑」那颗灯带辉光", len(glow) == 1 and ".st-run" in glow[0])
+    check(f"珊瑚没被刷满整页（{ui.HTML.count('rgba(255,107,74,')} 处）",
+          ui.HTML.count("rgba(255,107,74,") <= 6)
+    check("页面不引用任何外部资源（离线可用）",
+          'src="http' not in ui.HTML and 'href="http' not in ui.HTML)
+    check("步骤是页面自己去接口取的（不是写死的）",
+          "st.steps" in ui.HTML and "会话库" not in ui.HTML)
+
+    # ---- 起服务 ----
+    tmp = tempfile.mkdtemp(prefix="gbc-ui-")
+    try:
+        panel = ui.Panel(os.path.join(tmp, "config.json"),
+                         os.path.join(tmp, "session-history.html"))
+        srv = ui.create_server(panel, 0)
+        port = srv.server_address[1]
+        threading.Thread(target=srv.serve_forever, kwargs={"poll_interval": 0.1},
+                         daemon=True).start()
+        base = f"http://127.0.0.1:{port}"
+
+        def get(path: str, host: str | None = None):
+            req = urllib.request.Request(base + path)
+            if host:
+                req.add_header("Host", host)
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                return resp.status, resp.read().decode("utf-8", "replace")
+
+        status, body = get("/")
+        check("/ 返回 200", status == 200)
+        check("/ 就是那个页面", "开始扫描" in body)
+        status, body = get("/api/ping")
+        check("/api/ping 认得自己", ui.APP_TAG in body, body.strip())
+        status, body = get("/api/state")
+        st = json.loads(body)
+        check("/api/state 带版本号", st.get("version") == ui.VERSION)
+        check("/api/state 说得出数据目录", bool(st.get("dataRoot")))
+        check("/api/state 的四个步骤是 idle",
+              [s["state"] for s in st["steps"]] == ["idle"] * 4)
+        check("步骤名就是 flow.STEPS 那份（两边不会漂）",
+              [s["short"] for s in st["steps"]] == [s["short"] for s in flow.STEPS])
+        check("/api/state 没扫过时说没扫过", st.get("runs") == 0 and not st["result"])
+        check("产物不存在时不谎报", st["hasOutput"] is False)
+        try:
+            get("/etc/passwd")
+            check("面板不暴露别的路径（404）", False, "居然放行了")
+        except urllib.error.HTTPError as exc:
+            check("面板不暴露别的路径（404）", exc.code == 404)
+
+        # ---- 拿别人的 Host 头来蹭：DNS rebinding ----
+        try:
+            get("/api/state", host="evil.example")
+            check("非回环 Host 被拒", False, "居然放行了")
+        except urllib.error.HTTPError as exc:
+            check("非回环 Host 被拒（403）", exc.code == 403)
+
+        # ---- 没生成过就别装作有东西可下载 ----
+        try:
+            get("/download")
+            check("还没有产物时 /download 给 404", False)
+        except urllib.error.HTTPError as exc:
+            check("还没有产物时 /download 给 404", exc.code == 404)
+
+        # ---- 同一个面板不会同时跑两次扫描 ----
+        check("空闲时不算在跑", panel.job.running is False)
+
+        # ---- 退出 ----
+        req = urllib.request.Request(base + "/api/quit", method="POST")
+        req.add_header("Origin", base)
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            check("/api/quit 应答了", resp.status == 200)
+        time.sleep(0.8)
+        try:
+            get("/api/ping")
+            check("/api/quit 真的把服务关了", False, "还能连上")
+        except Exception:
+            check("/api/quit 真的把服务关了", True)
+        srv.server_close()
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def test_flow_shared() -> None:
+    """[45] 命令行和图形前台共用同一条流程（改了怕两边漂）。"""
+    import ast
+    import inspect
+    import textwrap
+
+    from feishu_hub import flow, scan
+
+    print("\n[45] 共享流程：命令行与图形前台是同一份")
+
+    check("四步的顺序与 key 固定",
+          [s["key"] for s in flow.STEPS] == ["sessions", "feed", "snapshot", "history"])
+    check("步骤标题带 1/4 这种编号", flow.head_of(1).startswith("1/4"))
+    check("标题末尾就是 STEPS 里那句",
+          flow.head_of(4) == f"4/4  {flow.STEPS[3]['head']}")
+
+    def imported_modules(fn) -> list[str]:
+        """看这个函数**实际 import 了什么**（走 AST，不看注释和文档字符串）。"""
+        tree = ast.parse(textwrap.dedent(inspect.getsource(fn)))
+        found: list[str] = []
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                found += [alias.name for alias in node.names]
+            elif isinstance(node, ast.ImportFrom):
+                found.append(node.module or "")
+                found += [alias.name for alias in node.names]
+        return found
+
+    # 体检那条路不能碰 hub —— hub 头顶着飞书 SDK，光 import 就 5.7 秒。
+    # 这是实测出来的，用源码断言钉住，免得以后有人顺手加回去。
+    # （注意别用字符串匹配：文档字符串里就写着「不 import hub」。）
+    for fn, name in ((flow.run_snapshot, "本机快照"), (flow.run_feed, "事件流")):
+        tried = [m for m in imported_modules(fn) if "hub" in m]
+        check(f"{name}那步不 import hub", not tried, "; ".join(tried))
+
+    # 配置读取不走 hub.Config
+    check("读配置不依赖 hub", flow._cfg_flag("/不存在/config.json", "feed_enabled", False) is False)
+
+    # 缓存默认必须是关的：面板是长驻进程，一个看不见的 TTL 迟早端出过期数据
+    check("记录缓存默认关", scan._CACHE_TTL == 0)
+    with scan.cache_records():
+        check("with 里才打开", scan._CACHE_TTL > 0)
+    check("退出 with 后归零", scan._CACHE_TTL == 0)
+    check("退出 with 后缓存清空", scan._RECORDS_CACHE == {})
+
+    tmp = tempfile.mkdtemp(prefix="gbc-flow-")
+    try:
+        out = os.path.join(tmp, "h.html")
+        # 只扫一个本机没有的 CLI：快，但走的还是完整那条路（真读盘、真渲染、真落盘）
+        info = scan.generate(out, cli_filter={"kimi"})
+        for key in ("path", "order", "labels", "counts", "total", "searchable", "size"):
+            check(f"generate 有 {key}", key in info)
+        check("产物真的落盘了", os.path.exists(out) and info["size"] > 0)
+        check("没留 .part 临时文件", not os.path.exists(out + ".part"))
+        text = scan.render_summary(info)
+        check("摘要跟命令行同一份文案",
+              "扫描结果" in text and "合计" in text and info["path"] in text)
+        check("counts 覆盖全部 CLI", set(info["counts"]) == set(info["order"]))
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 def main() -> int:
     print("=" * 68)
     print("Grok Build Center · 离线冒烟测试（不联网、不建飞书应用）")
@@ -1288,6 +1445,8 @@ def main() -> int:
     test_bitable_sync()
     test_feed_channel()
     test_session_store()
+    test_ui_panel()
+    test_flow_shared()
 
     print("\n" + "=" * 68)
     print(f"通过 {PASS} · 失败 {FAIL}")

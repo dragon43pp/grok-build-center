@@ -6,7 +6,9 @@
 产出（都在 dist/ 下）：
 
     dist/GrokBuildCenter/            免安装版（整个目录拷走就能用）
-      GrokBuildCenter.exe            主程序：体检 / 面板 / 历史网页 / 会话管理
+      GrokBuildCenter.exe            图形前台（双击这个，没有黑窗口）
+      GrokBuildCenter-cli.exe        命令行版（README 里那一串命令用它）
+      _internal/                     两个 exe 共用这一份依赖
     dist/GrokBuildCenter-Setup.exe   安装包（单文件，双击就装）
     dist/GrokBuildCenter-portable.zip  上面那个免安装目录的压缩包
 
@@ -15,6 +17,17 @@
     python tools/build_exe.py                 # 全打（主程序 + 安装包 + zip）
     python tools/build_exe.py --app           # 只打主程序，调 UI 时够用
     python tools/build_exe.py --skip-clean    # 复用上次的 build/（快一点，但脏）
+
+为什么要**两个 exe**：
+图形界面和命令行是两套 Windows 子系统（GUI / CUI），一个 exe 只能选一个。
+选 GUI，命令行就看不到输出（GUI 程序没有控制台）；
+选 CUI，双击就永远有个黑窗口站在那儿 —— 那正是要解决的问题。
+所以两个都要：双击走 GUI，敲命令走 CUI。它们共用同一份 `_internal`，
+体积只多了一个几百 KB 的引导器。
+
+为什么必须生成 .spec：
+PyInstaller 的命令行只支持一个 EXE，两个 EXE 共用一份依赖只能用 spec
+（`COLLECT` 同时收两个 `EXE(..., exclude_binaries=True)`）。
 
 为什么一定要用项目自带的 .venv：
 PyInstaller 会把**当前解释器里装的东西**一起打进去。用系统的 python 打出来
@@ -36,7 +49,9 @@ ROOT = os.path.dirname(HERE)
 DIST = os.path.join(ROOT, "dist")
 BUILD = os.path.join(ROOT, "build")
 APP_NAME = "GrokBuildCenter"
+CLI_NAME = APP_NAME + "-cli"
 ICON = os.path.join(ROOT, "assets", "icon", "center.ico")
+SPEC = os.path.join(BUILD, "gbc.spec")
 
 
 def venv_python() -> str:
@@ -49,63 +64,138 @@ def venv_python() -> str:
     return sys.executable
 
 
-def run(cmd: list[str], **kw) -> None:
+def run(cmd: list[str], cwd: str | None = None, **kw) -> None:
     print("  $ " + " ".join('"%s"' % c if " " in c else c for c in cmd))
-    r = subprocess.run(cmd, cwd=ROOT, **kw)
+    r = subprocess.run(cmd, cwd=cwd or ROOT, **kw)
     if r.returncode != 0:
         raise SystemExit("[x] 失败（退出码 %d）：%s" % (r.returncode, cmd[0]))
 
 
 def pyinstaller(*args: str) -> None:
-    run([venv_python(), "-m", "PyInstaller", *args])
+    # spec 里的路径是相对的（默认 ./dist 和 ./build），所以必须在仓库根执行
+    run([venv_python(), "-m", "PyInstaller", *args], cwd=ROOT)
 
 
 # ---------------------------------------------------------------- 主程序
 
-def build_app(clean: bool) -> str:
-    print("\n[1/4] 主程序 " + APP_NAME + ".exe")
-    args = [
-        "--noconfirm",
-        "--onedir",                       # 目录式：启动快，且安装包直接拷目录
-        "--console",                      # 它是命令行工具，不是 GUI
-        "--name", APP_NAME,
-        "--distpath", DIST,
-        "--workpath", BUILD,
-        "--specpath", BUILD,
-        "--paths", ROOT,
-        # 可写状态（config.json 等）在 exe 旁边，不埋进包里 —— 见 feishu_hub/paths.py
-        "--hidden-import", "tools.sessions",
-        "--hidden-import", "tools.sessions_html",
-        "--hidden-import", "tools.smoke_test",
-        "--hidden-import", "tools.config_ready",
-        "--hidden-import", "tools.make_lnk",
-        # lark-oapi 的 event 模型是动态 import 的，静态分析收不全
-        "--collect-submodules", "lark_oapi",
-        "--collect-submodules", "feishu_hub",
-        "--exclude-module", "PyInstaller",
-        "--exclude-module", "tkinter",
-        "--exclude-module", "unittest",
-    ]
-    if clean:
-        args.append("--clean")
-    if os.path.exists(ICON):
-        args += ["--icon", ICON]
-    else:
-        print("  [!] 没有图标 %s，先用默认的。生成：python tools/make_icon.py" % ICON)
-    # 品牌资产带上，体积可忽略；改了 SVG 不用重新打包也能看到
+SPEC_TEMPLATE = '''# -*- mode: python ; coding: utf-8 -*-
+# 这个文件由 tools/build_exe.py 生成，别手改 —— 改那个脚本里的 SPEC_TEMPLATE。
+#
+# 用 spec 而不是命令行的唯一原因：命令行只能产出一个 EXE，
+# 而这里要两个（GUI + CUI）共用同一份 _internal。
+import os
+from PyInstaller.utils.hooks import collect_submodules
+
+ROOT = __ROOT__
+ICON = __ICON__ if os.path.exists(__ICON__) else None
+
+a = Analysis(
+    [os.path.join(ROOT, "tools", "app.py")],
+    pathex=[ROOT],
+    binaries=[],
+    datas=__DATAS__,
+    hiddenimports=__HIDDEN__ + collect_submodules("lark_oapi") + collect_submodules("feishu_hub"),
+    hookspath=[],
+    hooksconfig={},
+    runtime_hooks=[],
+    excludes=__EXCLUDES__,
+    noarchive=False,
+)
+pyz = PYZ(a.pure)
+
+# 同一个 Analysis / 同一个 pyz，两边的差别只有 PE 头里的子系统标志
+gui = EXE(
+    pyz, a.scripts, [],
+    exclude_binaries=True,
+    name=__APP__,
+    debug=False,
+    bootloader_ignore_signals=False,
+    strip=False,
+    upx=False,
+    console=False,              # GUI 子系统：双击不出黑窗口
+    disable_windowed_traceback=False,   # 崩了弹框，比什么都看不见强
+    icon=ICON,
+)
+cli = EXE(
+    pyz, a.scripts, [],
+    exclude_binaries=True,
+    name=__CLI__,
+    debug=False,
+    bootloader_ignore_signals=False,
+    strip=False,
+    upx=False,
+    console=True,               # CUI 子系统：命令行那一串命令用它
+    icon=ICON,
+)
+coll = COLLECT(
+    gui, cli,
+    a.binaries, a.datas,
+    strip=False,
+    upx=False,
+    name=__APP__,
+)
+'''
+
+
+def _lit(value) -> str:
+    """把 Python 值写成 spec 里的字面量（Windows 路径全用原始字符串）。"""
+    if isinstance(value, str):
+        return 'r"%s"' % value.replace('"', '\\"')
+    if isinstance(value, (list, tuple)):
+        return "[" + ", ".join(_lit(v) for v in value) + "]"
+    raise TypeError(value)
+
+
+def write_spec() -> str:
+    datas: list[tuple[str, str]] = []
     assets = os.path.join(ROOT, "assets")
     if os.path.isdir(assets):
-        args += ["--add-data", assets + os.pathsep + "assets"]
+        # 品牌资产体积可忽略；改了 SVG 不用重新打包也能看到
+        datas.append((assets, "assets"))
     example = os.path.join(ROOT, "config.json.example")
     if os.path.exists(example):
-        args += ["--add-data", example + os.pathsep + "."]
-    args.append(os.path.join(HERE, "app.py"))
+        datas.append((example, "."))
+    # 桌面快捷方式的说明要能点开看，装完就摆在 exe 旁边
+    for extra in ("README.md", "LICENSE"):
+        p = os.path.join(ROOT, extra)
+        if os.path.exists(p):
+            datas.append((p, "."))
+
+    hidden = ["tools.sessions", "tools.sessions_html", "tools.smoke_test",
+              "tools.config_ready", "tools.make_lnk"]
+    excludes = ["PyInstaller", "tkinter", "unittest", "pytest", "setuptools"]
+
+    text = (SPEC_TEMPLATE
+            .replace("__ROOT__", _lit(ROOT))
+            .replace("__ICON__", _lit(ICON))
+            .replace("__APP__", _lit(APP_NAME))
+            .replace("__CLI__", _lit(CLI_NAME))
+            .replace("__DATAS__", _lit(datas))
+            .replace("__HIDDEN__", _lit(hidden))
+            .replace("__EXCLUDES__", _lit(excludes)))
+    os.makedirs(BUILD, exist_ok=True)
+    with open(SPEC, "w", encoding="utf-8") as fh:
+        fh.write(text)
+    return SPEC
+
+
+def build_app(clean: bool) -> str:
+    print("\n[1/4] 主程序 " + APP_NAME + ".exe（图形）+ " + CLI_NAME + ".exe（命令行）")
+    if not os.path.exists(ICON):
+        print("  [!] 没有图标 %s，先用默认的。生成：python tools/make_icon.py" % ICON)
+    spec = write_spec()
+    args = ["--noconfirm", "--log-level", "WARN"]
+    if clean:
+        args.append("--clean")
+    args.append(spec)
     pyinstaller(*args)
 
-    exe = os.path.join(DIST, APP_NAME, APP_NAME + ".exe")
-    if not os.path.exists(exe):
-        raise SystemExit("[x] 没打出 " + exe)
-    return exe
+    app_dir = os.path.join(DIST, APP_NAME)
+    for name in (APP_NAME, CLI_NAME):
+        exe = os.path.join(app_dir, name + ".exe")
+        if not os.path.exists(exe):
+            raise SystemExit("[x] 没打出 " + exe)
+    return os.path.join(app_dir, APP_NAME + ".exe")
 
 
 # ---------------------------------------------------------------- 安装包
@@ -137,17 +227,19 @@ def clean_payload() -> list[str]:
 
 
 def stage_extras() -> str:
-    """把 `config.json.example` 也放一份到 exe 旁边。
+    """把 `config.json.example` 和说明文档也放一份到 exe 旁边。
 
-    `--add-data` 只会把它塞进 `_internal\\`，免安装版的人翻不到那儿。
-    放根目录一份，装完/解压完一眼就能看见「哦，要复制成 config.json」。
+    `--add-data` 只会把它们塞进 `_internal\\`，免安装版的人翻不到那儿。
+    放根目录一份，装完/解压完一眼就能看见「哦，要复制成 config.json」，
+    以及「面板右下角那个链接到底会打开哪个文件」。
+    返回配置样例的路径（没有就空串）。
     """
-    src = os.path.join(ROOT, "config.json.example")
-    dst = os.path.join(DIST, APP_NAME, "config.json.example")
-    if os.path.exists(src):
-        shutil.copy2(src, dst)
-        return dst
-    return ""
+    app_dir = os.path.join(DIST, APP_NAME)
+    for name in ("config.json.example", "README.md"):
+        src = os.path.join(ROOT, name)
+        if os.path.exists(src):
+            shutil.copy2(src, os.path.join(app_dir, name))
+    return os.path.join(app_dir, "config.json.example")
 
 
 def build_uninstaller() -> str:

@@ -31,18 +31,48 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import html
 import json
 import os
 import re
 import sqlite3
 import sys
+import time
 import urllib.parse
 import webbrowser
 from datetime import datetime, timezone
 
 GROK_SESSION_GRACE_SECONDS = 180   # session_start 与 grok created_at 的容差
 EXCERPT_LIMIT = 12000              # 每条记录嵌入 HTML 的正文上限（字符）
+
+# ---------------------------------------------------------------- 记录缓存
+#
+# 同一次体检里，「本机快照」和「历史会话网页」两步要的是**同一份**会话记录，
+# 却各自重建一遍（本机冷读约 4.5 秒，热读也要几秒）。所以给一个显式的、
+# 进程内的缓存：**默认关**，只有 flow.run_all 会打开，且生命周期就被限制在
+# 那一次扫描里。不这么做的话，把它做成「自动缓存 N 秒」会埋雷 ——
+# 面板是长驻进程，一个看不见的 TTL 迟早会端出过期数据。
+_RECORDS_CACHE: dict[tuple, tuple[float, list, dict]] = {}
+_CACHE_TTL = 0.0
+
+
+@contextlib.contextmanager
+def cache_records(ttl: float = 300.0):
+    """在这个 with 里，build_records() 的同参调用只真算一次。"""
+    global _CACHE_TTL
+    prev = _CACHE_TTL
+    _CACHE_TTL = ttl
+    _RECORDS_CACHE.clear()
+    try:
+        yield
+    finally:
+        _CACHE_TTL = prev
+        _RECORDS_CACHE.clear()
+
+
+def _cache_key(cli_filter, feed_events: str, feed_stats: str) -> tuple:
+    return (frozenset(cli_filter) if cli_filter else None, feed_events, feed_stats)
 
 # CLI 元信息：显示名 / 主题色 / 恢复命令模板
 CLI_META = {
@@ -812,8 +842,26 @@ def _opencode_parts(part_root: str, msg_id: str) -> list[str]:
 # --------------------------------------------------------------------------
 
 def build_records(cli_filter: set[str] | None = None,
-                  feed_events: str = "", feed_stats: str = "") -> tuple[list[dict], dict]:
+                  feed_events: str = "", feed_stats: str = "",
+                  progress=None) -> tuple[list[dict], dict]:
+    """progress(stage, **kw) 可选：纯通知，用来喂图形前台的进度条。
+    stage='cli' 一家扫完报一次（这一层是耗时大头），其余 stage 见 generate()。
+    """
+    def beat(stage: str, **kw) -> None:
+        if progress is not None:
+            try:
+                progress(stage, **kw)
+            except Exception:          # 进度回调绝不该弄挂主流程
+                pass
+
     want = (lambda c: cli_filter is None or c in cli_filter)
+
+    cache_key = _cache_key(cli_filter, feed_events, feed_stats)
+    if _CACHE_TTL > 0:
+        hit = _RECORDS_CACHE.get(cache_key)
+        if hit and (time.time() - hit[0]) <= _CACHE_TTL:
+            return list(hit[1]), dict(hit[2])
+
     records: list[dict] = []
     counts: dict[str, int] = {}
 
@@ -827,14 +875,20 @@ def build_records(cli_filter: set[str] | None = None,
     # 场次一律匹配不上，最后被当成 grok 合成一条噪音行 —— 标签是错的，
     # 而且跟真实会话重了一份。
     collected: dict[str, list[dict]] = {}
-    if want("grok"):
-        collected["grok"] = read_grok_sessions()
-    if want("codex"):
-        collected["codex"] = read_codex_sessions()
-    if want("claude"):
-        collected["claude"] = read_claude_sessions()
-    if want("opencode"):
-        collected["opencode"] = read_opencode_sessions()
+    # 读会话是耗时大头，一家报一次进度 —— 前台那个进度条就靠这个动
+    _readers = {
+        "grok": read_grok_sessions,
+        "codex": read_codex_sessions,
+        "claude": read_claude_sessions,
+        "opencode": read_opencode_sessions,
+    }
+    for _cli, _reader in _readers.items():
+        if not want(_cli):
+            continue
+        beat("cli", cli=_cli, label=CLI_META[_cli]["label"], phase="start")
+        collected[_cli] = _reader()
+        beat("cli", cli=_cli, label=CLI_META[_cli]["label"], phase="done",
+             found=len(collected[_cli]))
     for cli, items in collected.items():
         counts[cli] = len(items)
 
@@ -946,6 +1000,8 @@ def build_records(cli_filter: set[str] | None = None,
     records.sort(key=lambda r: r["sortKey"], reverse=True)
     stats["feedRuns"] = len(runs)
     stats["feedMatched"] = len(matched_run_indexes)
+    if _CACHE_TTL > 0:
+        _RECORDS_CACHE[cache_key] = (time.time(), list(records), dict(stats))
     return records, stats
 
 
@@ -1279,6 +1335,75 @@ def render_html(records: list[dict], counts: dict, generated_at: datetime) -> st
 # 主流程
 # --------------------------------------------------------------------------
 
+def generate(out_path: str,
+             cli_filter: set[str] | None = None,
+             feed_events: str = "",
+             feed_stats: str = "",
+             progress=None) -> dict:
+    """扫描 + 落盘，返回结构化结果。
+
+    存在的理由：命令行只要「打印」，图形前台（`feishu_hub/ui.py`）要的是
+    「每家的场次、可搜正文数、文件多大」这些**能被渲染成卡片的数据**。
+    两边都不该各自再算一遍 —— 分开算就会漂。
+
+    progress(stage, **kw) 可选：stage ∈ {scan, render, write}，纯通知，不参与逻辑。
+    """
+    def beat(stage: str, **kw) -> None:
+        if progress is not None:
+            try:
+                progress(stage, **kw)
+            except Exception:          # 进度回调绝不该弄挂主流程
+                pass
+
+    beat("scan")
+    records, stats = build_records(cli_filter, feed_events, feed_stats, progress=progress)
+    counts = {c: sum(1 for r in records if r["cli"] == c) for c in CLI_ORDER}
+    searchable = sum(1 for r in records if r["excerpt"])
+
+    beat("render", total=len(records))
+    document = render_html(records, counts, datetime.now())
+
+    beat("write", total=len(records))
+    # 先写临时文件再换过去：中途出错的话，上一版还能用
+    tmp = out_path + ".part"
+    with open(tmp, "w", encoding="utf-8") as fh:
+        fh.write(document)
+    os.replace(tmp, out_path)
+
+    return {
+        "path": out_path,
+        "order": list(CLI_ORDER),
+        "labels": {c: CLI_META[c]["label"] for c in CLI_ORDER},
+        "counts": counts,
+        "total": len(records),
+        "searchable": searchable,
+        "size": os.path.getsize(out_path),
+        "feedUsed": bool(feed_events),
+        "feedRuns": stats.get("feedRuns", 0),
+        "feedMatched": stats.get("feedMatched", 0),
+    }
+
+
+def render_summary(info: dict) -> str:
+    """把 generate() 的结构化结果渲染成命令行那段「扫描结果」。
+
+    单独抽出来是因为图形前台里也要显示同一段文本（放在「原始输出」里），
+    两边必须逐字一致 —— 否则用户会以为看到的不是一回事。
+    """
+    lines = ["扫描结果", "-" * 46]
+    for cli in info["order"]:
+        lines.append(f"  {info['labels'][cli]:<13}: {info['counts'].get(cli, 0):>5} 场")
+    if info["feedUsed"]:
+        # 这条路是可选的，没接就别在输出里占一行
+        lines.append(f"  {'外部启动记录':<11}: {info['feedRuns']:>5} 场"
+                     f"（匹配到 grok 会话 {info['feedMatched']} 场）")
+    lines.append(f"  {'可搜正文':<13}: {info['searchable']:>5} 场")
+    lines.append(f"  {'合计':<13}: {info['total']:>5} 场")
+    lines.append("-" * 46)
+    lines.append(f"输出：{info['path']}  ({info['size'] / 1024 / 1024:.1f} MB)")
+    return "\n".join(lines)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="扫描本机全部 AI CLI 的会话历史")
     parser.add_argument("--out", default=None, help="输出 HTML 路径")
@@ -1337,26 +1462,8 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     out_path = args.out or os.path.join(here, "session-history.html")
-    records, stats = build_records(cli_filter, feed_events, feed_stats)
-    counts = {c: sum(1 for r in records if r["cli"] == c) for c in CLI_ORDER}
-
-    document = render_html(records, counts, datetime.now())
-    with open(out_path, "w", encoding="utf-8") as fh:
-        fh.write(document)
-
-    print("扫描结果")
-    print("-" * 46)
-    for cli in CLI_ORDER:
-        print(f"  {CLI_META[cli]['label']:<13}: {counts.get(cli, 0):>5} 场")
-    if feed_events:
-        # 这条路是可选的，没接就别在输出里占一行
-        print(f"  {'外部启动记录':<11}: {stats.get('feedRuns', 0):>5} 场"
-              f"（匹配到 grok 会话 {stats.get('feedMatched', 0)} 场）")
-    print(f"  {'可搜正文':<13}: {sum(1 for r in records if r['excerpt']):>5} 场")
-    print(f"  {'合计':<13}: {len(records):>5} 场")
-    print("-" * 46)
-    size_mb = os.path.getsize(out_path) / 1024 / 1024
-    print(f"输出：{out_path}  ({size_mb:.1f} MB)")
+    info = generate(out_path, cli_filter, feed_events, feed_stats)
+    print(render_summary(info))
 
     if args.open_after:
         webbrowser.open("file:///" + out_path.replace("\\", "/"))
