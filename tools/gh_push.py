@@ -33,16 +33,37 @@ def git(*args, binary=False):
     return r.stdout if binary else r.stdout.decode("utf-8", "replace")
 
 
-def gh_api(path, method="GET", body=None):
+def gh_api(path, method="GET", body=None, tries=5):
+    """带重试的 gh api 调用。
+
+    这台机器到 api.github.com 的路由不稳定，TLS handshake timeout 是常态，
+    所以网络类错误一律重试（指数退避），只有明确的 4xx 才直接抛。
+    """
     cmd = ["gh", "api", path, "--method", method]
     if body is not None:
         cmd += ["--input", "-"]
-    r = subprocess.run(cmd, cwd=ROOT, input=(json.dumps(body).encode("utf-8") if body is not None else None),
-                       capture_output=True)
-    if r.returncode != 0:
-        raise RuntimeError("gh api %s %s failed: %s" % (method, path, r.stderr.decode("utf-8", "replace").strip()))
-    out = r.stdout.decode("utf-8", "replace").strip()
-    return json.loads(out) if out else {}
+    payload = json.dumps(body).encode("utf-8") if body is not None else None
+    # MSYS_NO_PATHCONV：Git Bash 会把 /repos/... 当路径改写成 D:/... 直接报假错误
+    env = dict(os.environ, MSYS_NO_PATHCONV="1")
+
+    last = ""
+    for attempt in range(1, tries + 1):
+        r = subprocess.run(cmd, cwd=ROOT, env=env, input=payload, capture_output=True)
+        if r.returncode == 0:
+            out = r.stdout.decode("utf-8", "replace").strip()
+            return json.loads(out) if out else {}
+        last = r.stderr.decode("utf-8", "replace").strip()
+        retryable = any(k in last for k in (
+            "handshake timeout", "timeout", "timed out", "connection reset",
+            "EOF", "temporarily unavailable", "502", "503", "504", "500",
+        ))
+        if not retryable or attempt == tries:
+            break
+        wait = min(2 ** attempt, 20)
+        print("        [retry %d/%d] %s  -> %.0fs 后重试" % (attempt, tries, last.splitlines()[-1][:70], wait))
+        import time as _t
+        _t.sleep(wait)
+    raise RuntimeError("gh api %s %s failed: %s" % (method, path, last))
 
 
 def parse_person(line):
@@ -127,12 +148,24 @@ def main():
         for path, mode, obj in entries:
             if obj not in blob_cache:
                 data = git("cat-file", "blob", obj, binary=True)
-                r = gh_api("/repos/%s/git/blobs" % a.repo, "POST",
-                           {"content": base64.b64encode(data).decode("ascii"), "encoding": "base64"})
-                api_calls += 1
-                blob_cache[obj] = r["sha"]
-                if len(blob_cache) % 20 == 0:
-                    print("        ... 已上传 %d 个 blob" % len(blob_cache))
+                if not data:
+                    # GitHub 的 blobs API 对空内容直接报 malformed，
+                    # 而空 blob 的 sha 是可算的，不用走网络。
+                    blob_cache[obj] = subprocess.run(
+                        ["git", "hash-object", "-t", "blob", "--stdin"],
+                        cwd=ROOT, input=b"", capture_output=True
+                    ).stdout.decode().strip()
+                else:
+                    try:
+                        r = gh_api("/repos/%s/git/blobs" % a.repo, "POST",
+                                   {"content": base64.b64encode(data).decode("ascii"),
+                                    "encoding": "base64"})
+                    except RuntimeError as e:
+                        raise RuntimeError("%s  (文件: %s, %d 字节)" % (e, path, len(data)))
+                    api_calls += 1
+                    blob_cache[obj] = r["sha"]
+                    if len(blob_cache) % 20 == 0:
+                        print("        ... 已上传 %d 个 blob" % len(blob_cache))
             tree_items.append({"path": path, "mode": mode, "type": "blob", "sha": blob_cache[obj]})
 
         t = gh_api("/repos/%s/git/trees" % a.repo, "POST", {"tree": tree_items})
@@ -168,9 +201,11 @@ def main():
     except RuntimeError as e:
         if "already exists" not in str(e) and "422" not in str(e):
             raise
+        # 空仓库要先有东西才能建 blob，所以通常先垫过一个占位提交；
+        # 这里要把它顶掉，必须是 force（我们的提交跟占位提交没有祖先关系）。
         gh_api("/repos/%s/git/refs/heads/%s" % (a.repo, a.ref), "PATCH",
-               {"sha": last, "force": False})
-        print("\n[ok] 更新 refs/heads/%s -> %s" % (a.ref, last[:12]))
+               {"sha": last, "force": True})
+        print("\n[ok] 更新 refs/heads/%s -> %s（force）" % (a.ref, last[:12]))
 
     print("API 调用 %d 次（blob %d 个）" % (api_calls, len(blob_cache)))
     print("https://github.com/%s" % a.repo)
