@@ -35,5 +35,6 @@ _edgeprof*/
 .DS_Store
 Thumbs.db
 
-# 离线 wheel 体积大，改用 requirements.txt；想内置再单独放
-# tools/wheels/
+# 离线 wheel 体积大（11MB 全是二进制），不进仓库。
+# 需要离线装的话本地放一份到 tools/wheels/ 即可，offline_pip.py 认得；想内置再单独放。
+tools/wheels/
