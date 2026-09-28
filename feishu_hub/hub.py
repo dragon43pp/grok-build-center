@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Grok Build Pager · 飞书面板
+Grok Build Center · 飞书面板
 
 一句话：把本机 4 家 AI 编程 CLI 的 340+ 场会话状态，做成飞书里一张**原地刷新**的常驻卡片，
 在手机上就能看到全部会话的状态，点「打开」直接回到那场会话。
@@ -763,7 +763,7 @@ def print_table(snap: Snapshot) -> None:
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="Grok Build Pager · 飞书面板")
+    ap = argparse.ArgumentParser(description="Grok Build Center · 飞书面板")
     ap.add_argument("--print", action="store_true", help="只打印本机状态，不连飞书")
     ap.add_argument("--card-preview", action="store_true", help="打印卡片 JSON 与体积")
     ap.add_argument("--bitable-preview", action="store_true",

@@ -10,7 +10,7 @@ Git 的 commit 哈希只由 tree + parent + author + committer + message 决定�
 这样本地和远端不会出现「两份历史」，之后网络恢复了直接 `git push` 也能对上。
 
 用法：
-    python tools/gh_push.py --repo dragon43pp/grok-build-pager
+    python tools/gh_push.py --repo dragon43pp/grok-build-center
     python tools/gh_push.py --repo owner/name --ref main --dry-run
 """
 from __future__ import annotations

@@ -1,5 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 640" width="1280" height="640" role="img" aria-label="Grok Build Pager">
-  <title>Grok Build Pager — social card</title>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 640" width="1280" height="640" role="img" aria-label="Grok Build Center">
+  <title>Grok Build Center — social card</title>
   <defs>
     <radialGradient id="oglow">
       <stop offset="0%" stop-color="#FF6B4A" stop-opacity="0.55"/>
@@ -51,13 +51,13 @@
 
   <text x="640" y="400" text-anchor="middle"
         font-family="ui-sans-serif, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif"
-        font-size="96" font-weight="700" letter-spacing="-2.6" class="ink">Pager</text>
+        font-size="96" font-weight="700" letter-spacing="-2.6" class="ink">Center</text>
 
   <rect class="hair" x="560" y="430" width="160" height="1"/>
 
   <text x="640" y="478" text-anchor="middle"
         font-family="ui-sans-serif, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif"
-        font-size="24" class="dim">会话卡住了，它呼你。</text>
+        font-size="24" class="dim">会话卡住了，它主动找你。</text>
 
   <text x="640" y="518" text-anchor="middle"
         font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace"
@@ -65,5 +65,5 @@
 
   <text x="640" y="588" text-anchor="middle"
         font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace"
-        font-size="14" class="faint">github.com/dragon43pp/grok-build-pager</text>
+        font-size="14" class="faint">github.com/dragon43pp/grok-build-center</text>
 </svg>

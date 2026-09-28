@@ -1,23 +1,40 @@
-# Grok Build Pager · 设计规范
+# Grok Build Center · 设计规范
 
 > 一页看完。改任何视觉之前先读这个。
 
 ## 一、名字
 
-**Grok Build Pager** —— 呼机。
+**Grok Build Center** —— 会话中心。
 
 你开了六个 Grok Build，去泡了杯咖啡。回来的时候不知道哪个卡在等你点确认。
-这东西替你盯着，**卡住了就呼你**。
+这里把所有会话收在一个地方：**一场不漏，卡住的那场会主动找你。**
 
-它不是「dashboard」（仪表盘，你得盯着它），是 **pager**（传呼机，它来叫你）。
-这个区别决定了整个产品的语气：**不要求你持续关注，只在该打断你的时候打断你。**
+它**不做成 dashboard（仪表盘）**。仪表盘要你持续盯着它；而这里的原则是：
+**不要求你持续关注，只在该打断你的时候打断你。**
 
-仓库名 `grok-build-pager`。前面那截 `grok-build-` 不是装饰 —— GitHub 上
+仓库名 `grok-build-center`。前面那截 `grok-build-` 不是装饰 —— GitHub 上
 `grok-build-vscode` / `grok-build-switch` / `grok-build-auth` 是这个生态的搜索命名空间，
 搜 `grok build` 能命中，这是引流的一部分，别改。
 
-> 为什么不用 `grok-build-deck`：`grokdeck`(5★) 和 `grok-deck`(1★) 已经被人占了，
-> 撞名会分流搜索。名字要独占。
+### 改名的教训（记下来免得再犯）
+
+这项目叫过 `grok-build-pager`，再之前叫过 `SessionDeck`。两次改名换来三条规矩：
+
+1. **名字不能是比喻。** pager（传呼机）这个比喻其实很准 —— 但用户遇到问题时
+   搜的是 `grok build session manager`，**没人会去搜一个比喻**。
+   要么名字就是用户会打的词，要么你有推广预算去教育他。我们没有预算。
+2. **名字不用扛搜索关键词。** 关键词交给仓库简介 + 话题标签
+   （现在挂了 `session-manager` / `resume` / `handoff` / `session-history` 等 20 个），
+   名字只要干净、短、像这生态里的一员就行。
+3. **不能撞名。** 没用 `grok-build-manager` 就是因为
+   `Rylaispirit/grok-build-manager` 已经存在（1★）—— 撞名会在搜索结果里互相分流。
+   同理当年弃用 `grok-build-deck`（`grokdeck` 5★、`grok-deck` 1★ 已占）。
+   **改名之前先搜一遍。**
+
+> 为什么不全用 `grok` 当前缀：`grok` 这个搜索池有 **28,000+ 个仓库**，被
+> `grok-1`(52k★)、系统提示词泄露(50k★)、虚拟伴侣(49k★) 这类项目霸屏，搜它的人
+> 多半在找「免费 ChatGPT 替代品」。而 `grok-build` 只有 **445 个仓库**，
+> 全是围绕这个 CLI 的 —— **搜它的人就是目标用户。**
 
 ## 二、唯一的设计原则
 
@@ -110,9 +127,9 @@
 
 ```
 GROK BUILD            ← 小、等宽、字距拉开、灰
-Pager                 ← 大、粗、字距压紧、白
+Center                ← 大、粗、字距压紧、白
 ─────────────
-会话卡住了，它呼你。      ← 一句话价值主张
+会话卡住了，它主动找你。   ← 一句话价值主张
 LOG · RESUME · SEARCH · FEISHU
 ```
 
@@ -129,8 +146,8 @@ LOG · RESUME · SEARCH · FEISHU
 | `assets/status-lights.svg` | 状态灯图例（needs-you 行高亮） | 660×276 |
 | `assets/architecture.svg` | 数据流图 | 880×356 |
 | `assets/icon.svg` | 应用图标源文件 | 256 见方 |
-| `assets/icon/pager.ico` | Windows 图标（7 个尺寸内嵌） | 16→256 |
-| `assets/icon/pager-N.png` | 各尺寸 PNG | — |
+| `assets/icon/center.ico` | Windows 图标（7 个尺寸内嵌） | 16→256 |
+| `assets/icon/center-N.png` | 各尺寸 PNG | — |
 | `assets/generated/*.png` | gpt-image-2 出的位图（不进 git） | — |
 
 所有 SVG 都写了 `@media (prefers-color-scheme)`，GitHub 上跟着系统明暗自动切。

@@ -1,5 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 356" width="880" height="356" role="img" aria-label="Grok Build Pager architecture">
-  <title>Pager data flow</title>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 356" width="880" height="356" role="img" aria-label="Grok Build Center architecture">
+  <title>Grok Build Center data flow</title>
   <style>
     .bg    { fill: #0B0E13; }
     .box   { fill: #12171F; stroke: #232B36; stroke-width: 1; }

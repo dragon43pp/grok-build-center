@@ -149,7 +149,7 @@ def setup_bitable(client: lark.Client, raw: dict) -> bool:
         warn("跳过多维表格。之后想开就重跑：python tools/setup.py --bitable-only")
         return False
 
-    name = ask("多维表格名字", "Grok Build Pager")
+    name = ask("多维表格名字", "Grok Build Center")
     try:
         app_token, url = bt.create_base(client, name)
     except bt.BitableError as exc:
@@ -291,7 +291,7 @@ def cmd_receive_id_only(raw: dict) -> int:
 
 
 def cmd_full(raw: dict) -> int:
-    hr("Grok Build Pager · 安装向导")
+    hr("Grok Build Center · 安装向导")
     print(f"  {DIM}先把飞书应用建出来（开发者后台 7 步，见 README「第一步」），")
     print(f"  拿到 app_id / app_secret 再回来。这里只做后面那些手工活。{OFF}")
 
@@ -339,7 +339,7 @@ def cmd_full(raw: dict) -> int:
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="Grok Build Pager · 安装向导")
+    ap = argparse.ArgumentParser(description="Grok Build Center · 安装向导")
     ap.add_argument("--check", action="store_true", help="只检查现有配置")
     ap.add_argument("--bitable-only", action="store_true", help="只补建多维表格")
     ap.add_argument("--receive-id-only", action="store_true", help="只补 open_id")

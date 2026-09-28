@@ -21,7 +21,7 @@
       "prompt": "A single app icon, square, filling the frame. A rounded-square plate with a subtle vertical gradient from slate #1B2230 at the top to near-black #0B0E13 at the bottom, with a faint 1px lighter edge. Centred in the plate: one large coral #FF6B4A circle with a soft radial halo around it, and directly beneath it one short horizontal rounded bar in muted slate grey. Nothing else in the image. Strong silhouette, fully readable at 32 pixels, no text, no other lights, no decoration."
     },
     {
-      "name": "pager-screen",
+      "name": "center-screen",
       "ratio": "4:3",
       "desc": "产品界面示意图（呼机屏幕）",
       "prompt": "A close-up mockup of a dark handheld pager screen, filling the frame. An inset rounded rectangle in near-black #0E1218 with a 1px darker border. Inside, top to bottom: a row where a coral dot glows brightly at the left and a medium-length off-white placeholder bar sits beside it, with a shorter grey placeholder bar right-aligned; then a hairline; then two more rows, each with a small dim grey dot at the left and two grey placeholder bars of different lengths; then a hairline; then a bottom strip with one tiny grey placeholder bar at the left and one tiny coral placeholder bar right-aligned. Only that first dot is lit. Flat, precise, no letters, no numbers."

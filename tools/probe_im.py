@@ -60,7 +60,7 @@ def main() -> int:
     ap.add_argument("--config", default=os.path.join(ROOT, "config.json"))
     ap.add_argument("--card", action="store_true", help="发真实的会话面板卡")
     ap.add_argument("--dry", action="store_true", help="只验 secret，不发消息")
-    ap.add_argument("--text", default="【Grok Build Pager】通道自检：应用身份发消息成功。"
+    ap.add_argument("--text", default="【Grok Build Center】通道自检：应用身份发消息成功。"
                                       "收到这条说明 app_secret / im 权限 / 可用范围 全部就绪。")
     args = ap.parse_args()
 

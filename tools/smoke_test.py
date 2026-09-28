@@ -1268,7 +1268,7 @@ def test_session_store() -> None:
 
 def main() -> int:
     print("=" * 68)
-    print("Grok Build Pager · 离线冒烟测试（不联网、不建飞书应用）")
+    print("Grok Build Center · 离线冒烟测试（不联网、不建飞书应用）")
     print("=" * 68)
 
     test_snapshot()

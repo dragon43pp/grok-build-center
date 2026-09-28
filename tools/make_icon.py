@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""生成 Grok Build Pager 自己的应用图标（.png + .ico）。
+"""生成 Grok Build Center 自己的应用图标（.png + .ico）。
 
 为什么不用第三方库：本机没装 Pillow / cairosvg，而图标只是「圆角方板 + 一颗灯 + 一条槽」
 这么点几何 —— 手写一个 PNG/ICO 编码器比装依赖干净，而且完全离线可复现。
@@ -191,23 +191,23 @@ def main(argv):
     for size in SIZES:
         rgba = render(size)
         blob = png_bytes(size, size, rgba)
-        with open(os.path.join(OUT, "pager-%d.png" % size), "wb") as f:
+        with open(os.path.join(OUT, "center-%d.png" % size), "wb") as f:
             f.write(blob)
         entries.append((size, blob))
-        print("  pager-%-3d.png  %6d bytes" % (size, len(blob)))
+        print("  center-%-3d.png  %6d bytes" % (size, len(blob)))
 
     entries.sort(key=lambda e: e[0])
     ico = ico_bytes(entries)
-    ico_path = os.path.join(OUT, "pager.ico")
+    ico_path = os.path.join(OUT, "center.ico")
     with open(ico_path, "wb") as f:
         f.write(ico)
-    print("  pager.ico        %6d bytes  (%d 个尺寸)" % (len(ico), len(entries)))
+    print("  center.ico        %6d bytes  (%d 个尺寸)" % (len(ico), len(entries)))
     return verify()
 
 
 def verify():
     ok = True
-    ico_path = os.path.join(OUT, "pager.ico")
+    ico_path = os.path.join(OUT, "center.ico")
     if not os.path.exists(ico_path):
         print("FAIL 缺 %s" % ico_path)
         return 1
@@ -216,7 +216,7 @@ def verify():
     if (reserved, kind) != (0, 1):
         print("FAIL ico 头不对")
         return 1
-    print("校验 pager.ico：%d 个尺寸" % count)
+    print("校验 center.ico：%d 个尺寸" % count)
     for i in range(count):
         w, h, _, _, planes, bpp, size, off = struct.unpack("<BBBBHHII", d[6 + i * 16:22 + i * 16])
         blob = d[off:off + size]

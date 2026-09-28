@@ -1,13 +1,13 @@
 <div align="center">
-  <img src="assets/banner.svg" alt="Grok Build Pager" width="100%">
+  <img src="assets/banner.svg" alt="Grok Build Center" width="100%">
 </div>
 
-<h1 align="center">Grok Build Pager</h1>
+<h1 align="center">Grok Build Center</h1>
 
 <p align="center">
-  <b>Grok Build 会话面板 —— 卡住了它呼你，几百场旧会话也找得回、接得上。</b><br>
-  跨项目管理 · 分叉与接续继承 · 带代码漂移检测的恢复。<br>
-  哪一个在等你确认，一眼看到；手机上也能当场放行。
+  <b>Grok Build 会话管理中心 —— 卡住了它主动找你，几百场旧会话也找得回、接得上。</b><br>
+  跨项目索引 · 分叉与接续继承 · 带代码漂移检测的恢复。<br>
+  哪个会话在等你确认，一眼看到；手机上也能当场放行。
 </p>
 
 <p align="center">
@@ -31,11 +31,15 @@
 **问题不是「没有工具」，是没有地方能一眼看全。**
 `~/.grok/sessions` 里躺着几百场会话，但没有任何东西告诉你「现在哪一场需要你」。
 
-Pager 就是干这个的：**替你盯着，卡住了就呼你。**
+这个中心就是干这个的：**把所有会话收在一个地方，然后让卡住的那场主动找你。**
 
-> 名字里的 pager 是传呼机，不是分页器。区别在于 ——
-> 仪表盘要你盯着它，呼机是它来叫你。这个产品不想占用你的注意力，
-> 只想在该打断你的时候打断你。
+> **为什么叫「中心」而不是「呼机」**：这项目原来叫 `grok-build-pager`，
+> pager（传呼机）这个比喻其实很准 —— 但现在用户遇到问题时搜的是
+> `grok build session manager`，**没人会去搜一个比喻**。
+> 要么名字就是用户会打的词，要么你有推广预算去教育他。我们没有预算。
+>
+> 但那条产品原则留下来了，它跟名字无关：**仪表盘要你盯着它，而这个东西不该占用你的注意力，
+> 只在该打断你的时候打断你。**
 
 ---
 
@@ -80,7 +84,7 @@ Pager 就是干这个的：**替你盯着，卡住了就呼你。**
 
 ## 会话的管理 · 继承 · 恢复
 
-「卡住了它呼你」管的是**当下**。真正每天都在疼的是**长期**：
+「卡住了它主动找你」管的是**当下**。真正每天都在疼的是**长期**：
 几个月下来 `~/.grok/sessions` 里躺着几百场会话 —— 你记得做过，但**找不到、接不回、也不敢接**。
 
 grok 自己的 `grok sessions list | search | delete` 和 `session_search.sqlite`（FTS5 索引）
@@ -154,10 +158,15 @@ python tools\sessions.py recover 造书成剧
   ! 代码已在会话之后变动，恢复前建议看一眼 diff
 ```
 
-**代码漂移检测是别人没有的一件事。** grok 把 `head_commit` 写进了 `summary.json`，
-但**没有任何地方拿它跟现在的仓库比过**。后果很实在：你三天后 `-r` 继续一场会话，
+**代码漂移这件事，grok 自己只写不读。** 它把 `head_commit` 写进了 `summary.json`，
+但 `grok sessions` / `--resume` / `--restore-code` 里**没有任何一处拿它跟现在的仓库比过**。
+后果很实在：你三天后 `-r` 继续一场会话，
 如果这期间仓库已经往前合了 20 个提交，AI 是在**它记忆里的旧代码**上做判断 ——
 它说的「这个文件里有 X 函数」可能早就不成立了。
+
+（同类工具里有没有人做这件事，我没逐个读过源码，不敢替你打包票。我只能说：
+`grok-app`、`cc-sessions-viewer`、`agent-sessions` 这几个的描述里都没提到它。
+**对比 ≠ 覆盖**，别拿这句当结论。）
 
 真需要回到当时的代码，grok 原生支持**连代码快照一起恢复**：
 
@@ -197,8 +206,8 @@ python -m feishu_hub.scan --out session-history.html  :: 全文检索页
 ## 快速开始
 
 ```cmd
-git clone https://github.com/dragon43pp/grok-build-pager.git
-cd grok-build-pager
+git clone https://github.com/dragon43pp/grok-build-center.git
+cd grok-build-center
 pip install -r requirements.txt
 
 python tools\setup.py        :: 向导：验凭证 → 建多维表格 → 拿 open_id → 写 config.json
@@ -317,7 +326,7 @@ HRack 开了一条**命名管道** `\\.\pipe\hrack-bridge-<用户名>`，token �
 ## 顺带支持的其他 CLI
 
 Grok Build 是主角，但同一套东西对旁边几家也生效 —— 它们的会话库格式不一样，
-Pager 各写了一个适配器：
+这里给每家各写了一个适配器：
 
 | CLI | 会话库 | 无头续跑 |
 | --- | --- | --- |
@@ -462,7 +471,7 @@ python tools\make_icon.py             :: 先生成我们自己的图标（零依
 python tools\make_start_menu.py       :: 装进开始菜单（--remove 卸载）
 ```
 
-点开「**Grok Build Pager**」就行，**不用你判断该走哪条路**：
+点开「**Grok Build Center**」就行，**不用你判断该走哪条路**：
 
 ```
 config.json 没配好  →  体检模式（离线，不需要任何配置）
@@ -505,7 +514,7 @@ python tools\report.py --cli grok  --status done
 ## 目录结构
 
 ```
-grok-build-pager/
+grok-build-center/
 ├─ run.cmd                    一键启动
 ├─ start.cmd                  Windows 开始菜单入口（自动判断体检 / 面板）
 ├─ config.json.example        配置模板（复制成 config.json）
@@ -651,6 +660,35 @@ lark-cli api GET /open-apis/application/v6/applications/<app_id>/app_versions/<o
 > **坑**：在 Git Bash 里跑 `lark-cli api GET /open-apis/...`，路径会被 **MSYS 转换成 Windows 路径**
 > → `/open-apis/C:/Users/.../open-apis/...` → 假 404。加 `MSYS_NO_PATHCONV=1`，
 > 或者用 typed 域命令（`lark-cli base +table-list` 那种，走 `--flag` 不裸传路径）。
+
+---
+
+## 同类工具，和这个项目的边界
+
+「看会话 / 搜会话 / 恢复会话」这件事**早就有人做了**，而且做得不小。
+写在这里是因为你不该在选型的时候被我蒙：
+
+| 项目 | ★ | 它擅长什么 |
+| --- | --- | --- |
+| [`RongleCat/grok-app`](https://github.com/RongleCat/grok-app) | 1382 | Grok Build 的桌面工作台（Tauri）：会话、项目、媒体、自动化 |
+| [`jerrywu001/cc-sessions-viewer`](https://github.com/jerrywu001/cc-sessions-viewer) | 389 | 多 CLI 会话查看 + 全局搜索 + resume + 导出 HTML |
+| [`joeynyc/Grok-UI`](https://github.com/joeynyc/Grok-UI) | 142 | Grok Build 的本地实时指挥台 |
+| [`jazzyalex/agent-sessions`](https://github.com/jazzyalex/agent-sessions) | 878 | macOS 上浏览 / 搜索 / **恢复**各家 agent 会话 |
+| [`Dicklesworthstone/coding_agent_session_search`](https://github.com/Dicklesworthstone/coding_agent_session_search) | 1148 | 统一索引并全文搜索多 agent 会话历史 |
+| [`Kc1t/alethe-agents`](https://github.com/Kc1t/alethe-agents) | 755 | 本地桌面工作区，跑 / 组织 / 恢复多个 coding agent |
+
+**所以「会话管理」不是这个项目的差异点 —— 它是入场券。** 那些项目在
+GUI、多 CLI 覆盖、全文搜索上都比这里强，我不跟它们比这些。
+
+这里不一样的地方只有四件，而且都是**恢复这件事做对做错**的细节：
+
+1. **恢复前的代码漂移检测** —— 会话停在哪个 commit，仓库现在走到哪。
+2. **recap 接续** —— 大会话 `-r` 要十几分钟，把 recap 喂给新会话是秒开。
+3. **`--restore-code` 走新 worktree** —— 回到当时的代码，但不动你手头的改动。
+4. **打断发生在手机上** —— 另外那些都是桌面 app；这个把「卡住了」推到你手机，
+   并让你在手机上放行。**桌面开着才有用的工具，解决不了「我不在电脑前」。**
+
+反过来说：**要 GUI，别用这个。**这里没有 GUI，只有终端、飞书卡片、和多维表格。
 
 ---
 
