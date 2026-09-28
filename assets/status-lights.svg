@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 250" width="640" height="250" role="img" aria-label="SessionDeck status lights">
+  <title>SessionDeck status lights</title>
+  <style>
+    .bg   { fill: #0E1116; }
+    .ink  { fill: #E6E9EF; }
+    .dim  { fill: #8B93A1; }
+    .hair { fill: #232A34; }
+    .amber   { fill: #F5A623; }
+    .coral   { fill: #FF6B4A; }
+    .mint    { fill: #34D399; }
+    .crimson { fill: #F0524B; }
+    .slate   { fill: #6B7484; }
+    .sky     { fill: #4C9AFF; }
+    @media (prefers-color-scheme: light) {
+      .bg   { fill: #F4F6FA; }
+      .ink  { fill: #14181F; }
+      .dim  { fill: #5E6775; }
+      .hair { fill: #E2E7EF; }
+    }
+  </style>
+
+  <rect class="bg" x="0" y="0" width="640" height="250" rx="12"/>
+
+  <g font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="13">
+    <g transform="translate(28,26)">
+      <circle class="amber" cx="8" cy="8" r="6"/>
+      <text x="28" y="12" class="ink">working</text>
+      <text x="140" y="12" class="dim">会话正在输出，别管它</text>
+    </g>
+    <rect class="hair" x="28" y="46" width="584" height="1"/>
+
+    <g transform="translate(28,62)">
+      <circle class="coral" cx="8" cy="8" r="6"/>
+      <text x="28" y="12" class="ink">needs-you</text>
+      <text x="140" y="12" class="dim">卡在等你点确认，最该去看的一个</text>
+    </g>
+    <rect class="hair" x="28" y="82" width="584" height="1"/>
+
+    <g transform="translate(28,98)">
+      <circle class="mint" cx="8" cy="8" r="6"/>
+      <text x="28" y="12" class="ink">done</text>
+      <text x="140" y="12" class="dim">跑完了，可以收结果</text>
+    </g>
+    <rect class="hair" x="28" y="118" width="584" height="1"/>
+
+    <g transform="translate(28,134)">
+      <circle class="crimson" cx="8" cy="8" r="6"/>
+      <text x="28" y="12" class="ink">error</text>
+      <text x="140" y="12" class="dim">炸了，需要人介入</text>
+    </g>
+    <rect class="hair" x="28" y="154" width="584" height="1"/>
+
+    <g transform="translate(28,170)">
+      <circle class="slate" cx="8" cy="8" r="6"/>
+      <text x="28" y="12" class="ink">idle</text>
+      <text x="140" y="12" class="dim">活着但没动静</text>
+    </g>
+    <rect class="hair" x="28" y="190" width="584" height="1"/>
+
+    <g transform="translate(28,206)">
+      <circle class="sky" cx="8" cy="8" r="6"/>
+      <text x="28" y="12" class="ink">exited</text>
+      <text x="140" y="12" class="dim">进程已退出，历史里还能捞回来</text>
+    </g>
+  </g>
+</svg>

@@ -1,0 +1,16 @@
+# AI 会话中心 · 飞书面板 —— 运行依赖
+#
+# 装法（本项目已有一个可用的 venv，路径见 run.cmd）：
+#     pip install -r requirements.txt
+#
+# 如果 pip 走不通（本机代理把 pip 的出网卡了，curl 却是通的），用自带的离线装法：
+#     python tools/offline_pip.py lark-oapi psutil
+
+lark-oapi>=1.7.3      # 飞书官方 Python SDK：长连接、发卡片、PATCH 卡片
+psutil>=5.9           # 扫存活进程，用来判断「在跑 / 空闲」
+
+# 下面这些是 lark-oapi 的传递依赖，列出来是为了版本可追溯：
+requests>=2.31
+websockets>=11,<16    # 注意上限：lark-oapi 1.7.3 还没适配 websockets 16
+httpx>=0.24
+certifi>=2023.5.7

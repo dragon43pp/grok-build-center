@@ -1,0 +1,159 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 420" width="1280" height="420" role="img" aria-label="SessionDeck — AI CLI session deck">
+  <title>SessionDeck banner</title>
+  <style>
+    .bg      { fill: #0E1116; }
+    .plate   { fill: #14181F; }
+    .ink     { fill: #E6E9EF; }
+    .dim     { fill: #8B93A1; }
+    .accent  { fill: #F5A623; }
+    .hair    { fill: #232A34; }
+    .rowtxt  { fill: #C3CAD6; }
+    .bar     { fill: #3A4453; }
+    .chipbg  { fill: #1A1F27; }
+    .amber   { fill: #F5A623; }
+    .coral   { fill: #FF6B4A; }
+    .mint    { fill: #34D399; }
+    .crimson { fill: #F0524B; }
+    .sky     { fill: #4C9AFF; }
+    .slate   { fill: #6B7484; }
+
+    @media (prefers-color-scheme: light) {
+      .bg      { fill: #F4F6FA; }
+      .plate   { fill: #FFFFFF; }
+      .ink     { fill: #14181F; }
+      .dim     { fill: #5E6775; }
+      .accent  { fill: #B9760A; }
+      .hair    { fill: #E2E7EF; }
+      .rowtxt  { fill: #3C4453; }
+      .bar     { fill: #CBD3DF; }
+      .chipbg  { fill: #EDF1F7; }
+    }
+  </style>
+
+  <rect class="bg" x="0" y="0" width="1280" height="420"/>
+
+  <!-- faint deck grid on the right half -->
+  <g class="hair" opacity="0.55">
+    <rect x="700" y="40"  width="520" height="2" rx="1"/>
+    <rect x="700" y="100" width="520" height="2" rx="1"/>
+    <rect x="700" y="160" width="520" height="2" rx="1"/>
+    <rect x="700" y="220" width="520" height="2" rx="1"/>
+    <rect x="700" y="280" width="520" height="2" rx="1"/>
+    <rect x="700" y="340" width="520" height="2" rx="1"/>
+    <rect x="700" y="400" width="520" height="2" rx="1"/>
+  </g>
+
+  <!-- ============ LEFT ============ -->
+  <g transform="translate(72,66) scale(1.8333)">
+    <rect x="4" y="5" width="40" height="38" rx="9" fill="#14181F"/>
+    <g fill="#59637A">
+      <rect x="10" y="13" width="20" height="4" rx="2"/>
+      <rect x="10" y="21" width="20" height="4" rx="2"/>
+      <rect x="10" y="29" width="20" height="4" rx="2"/>
+      <rect x="10" y="37" width="12" height="4" rx="2"/>
+    </g>
+    <circle cx="36" cy="15" r="2.7" fill="#F5A623"/>
+    <circle cx="36" cy="23" r="2.7" fill="#FF6B4A"/>
+    <circle cx="36" cy="31" r="2.7" fill="#34D399"/>
+    <circle cx="36" cy="39" r="2.7" fill="#4C9AFF"/>
+  </g>
+
+  <text x="72" y="212"
+        font-family="ui-sans-serif, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif"
+        font-size="58" font-weight="600" letter-spacing="-1.2" class="ink">Session<tspan class="accent" font-weight="700">Deck</tspan></text>
+
+  <text x="74" y="252"
+        font-family="ui-sans-serif, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif"
+        font-size="21" font-weight="400" class="dim">你的 AI CLI 会话甲板 —— 一屏看清，一键找回，随手可查</text>
+
+  <text x="74" y="284"
+        font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace"
+        font-size="13" letter-spacing="1.4" class="dim">SESSION · HISTORY · RESUME · LOG · SEARCH · FEISHU</text>
+
+  <!-- status legend chips -->
+  <g font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="12.5">
+    <g transform="translate(74,304)">
+      <rect class="chipbg" x="0" y="0" width="104" height="30" rx="15"/>
+      <circle class="amber" cx="16" cy="15" r="4.5"/>
+      <text x="30" y="19" class="rowtxt">working</text>
+    </g>
+    <g transform="translate(190,304)">
+      <rect class="chipbg" x="0" y="0" width="114" height="30" rx="15"/>
+      <circle class="coral" cx="16" cy="15" r="4.5"/>
+      <text x="30" y="19" class="rowtxt">needs you</text>
+    </g>
+    <g transform="translate(316,304)">
+      <rect class="chipbg" x="0" y="0" width="88" height="30" rx="15"/>
+      <circle class="mint" cx="16" cy="15" r="4.5"/>
+      <text x="30" y="19" class="rowtxt">done</text>
+    </g>
+    <g transform="translate(416,304)">
+      <rect class="chipbg" x="0" y="0" width="90" height="30" rx="15"/>
+      <circle class="crimson" cx="16" cy="15" r="4.5"/>
+      <text x="30" y="19" class="rowtxt">error</text>
+    </g>
+    <g transform="translate(518,304)">
+      <rect class="chipbg" x="0" y="0" width="80" height="30" rx="15"/>
+      <circle class="slate" cx="16" cy="15" r="4.5"/>
+      <text x="30" y="19" class="rowtxt">idle</text>
+    </g>
+  </g>
+
+  <!-- ============ RIGHT: session deck panel ============ -->
+  <rect class="plate" x="700" y="52" width="512" height="300" rx="14"/>
+  <rect class="hair" x="700" y="90" width="512" height="1"/>
+
+  <g>
+    <circle class="crimson" cx="726" cy="71" r="4.5"/>
+    <circle class="amber"   cx="744" cy="71" r="4.5"/>
+    <circle class="mint"    cx="762" cy="71" r="4.5"/>
+  </g>
+  <text x="784" y="76"
+        font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace"
+        font-size="12.5" letter-spacing="0.6" class="dim">sessiondeck · deck</text>
+
+  <g font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="13">
+    <!-- row 1 -->
+    <g transform="translate(724,122)">
+      <circle class="amber" cx="7" cy="8" r="5"/>
+      <text x="24" y="12" class="ink">grok</text>
+      <text x="86" y="12" class="rowtxt">D:\wx\miniprogram</text>
+      <text x="380" y="12" class="dim">12m</text>
+    </g>
+    <!-- row 2 -->
+    <g transform="translate(724,156)">
+      <circle class="coral" cx="7" cy="8" r="5"/>
+      <text x="24" y="12" class="ink">codex</text>
+      <text x="86" y="12" class="rowtxt">D:\agent-hub</text>
+      <text x="380" y="12" class="dim">blocked</text>
+    </g>
+    <!-- row 3 -->
+    <g transform="translate(724,190)">
+      <circle class="mint" cx="7" cy="8" r="5"/>
+      <text x="24" y="12" class="ink">claude</text>
+      <text x="86" y="12" class="rowtxt">~/docs/sales</text>
+      <text x="380" y="12" class="dim">done</text>
+    </g>
+    <!-- row 4 -->
+    <g transform="translate(724,224)">
+      <circle class="slate" cx="7" cy="8" r="5"/>
+      <text x="24" y="12" class="ink">kimi</text>
+      <text x="86" y="12" class="rowtxt">D:\content\daily</text>
+      <text x="380" y="12" class="dim">idle</text>
+    </g>
+    <!-- row 5 -->
+    <g transform="translate(724,258)">
+      <circle class="sky" cx="7" cy="8" r="5"/>
+      <text x="24" y="12" class="ink">opencode</text>
+      <text x="86" y="12" class="rowtxt">D:\sessiondeck</text>
+      <text x="380" y="12" class="dim">live</text>
+    </g>
+  </g>
+
+  <rect class="hair" x="724" y="286" width="464" height="1"/>
+  <g transform="translate(724,300)" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="12">
+    <text x="0" y="12" class="dim">5 sessions</text>
+    <text x="110" y="12" class="dim">1 needs you</text>
+    <text x="240" y="12" class="sky">feishu: synced</text>
+  </g>
+</svg>

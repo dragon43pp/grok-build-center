@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 340 64" width="340" height="64" role="img" aria-label="SessionDeck">
+  <title>SessionDeck logo</title>
+  <style>
+    .ink  { fill: #E6E9EF; }
+    .deck { fill: #F5A623; }
+    .sub  { fill: #8B93A1; }
+    .rule { fill: #2A313C; }
+    @media (prefers-color-scheme: light) {
+      .ink  { fill: #14181F; }
+      .deck { fill: #B9760A; }
+      .sub  { fill: #6B7484; }
+      .rule { fill: #D7DCE4; }
+    }
+  </style>
+
+  <!-- mark, scaled to 56px and vertically centred -->
+  <g transform="translate(0,4) scale(1.1667)">
+    <rect x="4" y="5" width="40" height="38" rx="9" fill="#14181F"/>
+    <g fill="#59637A">
+      <rect x="10" y="13" width="20" height="4" rx="2"/>
+      <rect x="10" y="21" width="20" height="4" rx="2"/>
+      <rect x="10" y="29" width="20" height="4" rx="2"/>
+      <rect x="10" y="37" width="12" height="4" rx="2"/>
+    </g>
+    <circle cx="36" cy="15" r="2.7" fill="#F5A623"/>
+    <circle cx="36" cy="23" r="2.7" fill="#FF6B4A"/>
+    <circle cx="36" cy="31" r="2.7" fill="#34D399"/>
+    <circle cx="36" cy="39" r="2.7" fill="#4C9AFF"/>
+  </g>
+
+  <!-- wordmark -->
+  <text x="76" y="34"
+        font-family="ui-sans-serif, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif"
+        font-size="27" font-weight="600" letter-spacing="-0.4"
+        class="ink">Session<tspan class="deck" font-weight="700">Deck</tspan></text>
+
+  <rect class="rule" x="76" y="43" width="196" height="1"/>
+  <text x="76" y="57"
+        font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace"
+        font-size="9.5" letter-spacing="0.9"
+        class="sub">SESSION / HISTORY / LOG / FEISHU</text>
+</svg>

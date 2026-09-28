@@ -1,0 +1,34 @@
+# 密钥和本机状态 —— 绝对不能进仓库
+config.json
+panel.json
+bitable-state.json
+*.local.json
+
+# 虚拟环境
+.venv/
+venv/
+env/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+# 生成的产物（本地看，不提交）
+session-history.html
+card-preview.html
+bitable-preview.html
+
+# 出图产物 + 中间 prompt（提示词本体 assets/prompts.json 是要提交的）
+assets/generated/
+
+# 编辑器 / 系统
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# 离线 wheel 体积大，改用 requirements.txt；想内置再单独放
+# tools/wheels/

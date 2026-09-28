@@ -1,0 +1,37 @@
+{
+  "_note": "gpt-image-2 出图提示词。style 是公共前缀，会和每个 item 的 prompt 拼在一起。生成：python tools/gen_assets.py",
+  "style": "Flat-vector UI illustration with a restrained 'terminal noir' art direction. Palette: deep charcoal #0E1116 background, panel #161B23, hairline borders #2A313C, off-white text #E6E9EF, muted grey #8B93A1, and exactly four signal accents used sparingly: amber #F5A623, coral #FF6B4A, mint #34D399, sky blue #4C9AFF. Crisp geometry, generous negative space, 1px hairline details, subtle inner glow on the signal dots only. No gradients that smear, no 3D bevels, no lens flare, no photorealism, no human faces, no text clutter. Typeface feel: geometric sans for headings, monospace for data. Composition centred, high contrast, readable when scaled down.",
+
+  "items": [
+    {
+      "name": "hero-banner",
+      "ratio": "16:9",
+      "desc": "GitHub README 顶部主视觉",
+      "prompt": "A wide hero banner for an open-source developer tool. Left side: a large abstract 'session deck' mark — a rounded dark console plate containing four horizontal slot bars, each bar ending in a small glowing signal dot coloured amber, coral, mint and sky blue from top to bottom. To its right, generous empty space where a wordmark would sit. Right side: a floating dark UI panel showing five rows of AI command-line sessions, each row = a small status dot + a CLI name slot + a dim path slot + a right-aligned duration slot; one row is highlighted with a coral dot. Thin hairline dividers between rows. Background is flat charcoal with a very faint grid of horizontal hairlines. Mood: precise, calm, engineered. No words, no letters."
+    },
+    {
+      "name": "social-card",
+      "ratio": "16:9",
+      "desc": "GitHub 仓库 social preview（OG 图）",
+      "prompt": "A social preview card, wide and clean. Centre-left: the session deck mark — a rounded dark console plate with four horizontal slot bars, each ending in a glowing signal dot (amber, coral, mint, sky blue). To the right of the mark: three stacked horizontal lines of decreasing width rendered as abstract placeholder bars in off-white, like a wordmark and two lines of tagline text that have been redacted — no actual letters. Far right: a vertical column of four large glowing status dots, evenly spaced, in amber, coral, mint and sky blue. Flat charcoal background, one thin accent line under the mark in amber. No words, no letters, no logos."
+    },
+    {
+      "name": "app-icon",
+      "ratio": "1:1",
+      "desc": "应用图标 / 仓库头像",
+      "prompt": "A single app icon, square, centred on flat charcoal. A rounded-square dark console plate with generous corner radius. Inside: four horizontal slot bars stacked with even spacing, the top three full width and the bottom one shorter, each bar a muted slate grey with rounded ends. At the right end of each bar sits a glowing signal dot: amber, coral, mint, sky blue from top to bottom. Strong silhouette, works at 32 pixels. Flat vector, no shadows, no gradients, no text."
+    },
+    {
+      "name": "deck-screen",
+      "ratio": "4:3",
+      "desc": "产品界面示意图（甲板主屏）",
+      "prompt": "A product UI mockup of a session dashboard, dark theme. A window with a slim title bar carrying three small traffic-light dots on the left and a dim monospace label slot on the right (no letters). Below it, a list of seven session rows. Each row: a glowing status dot on the left (mix of amber, coral, mint, sky blue, grey), then two abstract placeholder bars of different lengths in muted grey, then a short right-aligned placeholder bar for elapsed time. One row is selected with a subtle amber left edge marker and a slightly lighter panel fill. A thin filter strip at the top with five small rounded chips, one chip highlighted in amber. A compact footer bar showing three short placeholder chips. Flat charcoal, hairline row dividers, no letters, no numbers."
+    },
+    {
+      "name": "status-lights",
+      "ratio": "16:9",
+      "desc": "状态灯图例（文档配图）",
+      "prompt": "An illustration of six status lights arranged in two rows of three. Each item is a single large glowing dot paired with two short abstract placeholder bars underneath it (a wider bar and a narrower bar), like a legend entry without text. Dot colours, left to right, top row: amber, coral, mint; bottom row: crimson red, slate grey, sky blue. Flat charcoal background, generous spacing, each dot with a soft inner glow but no bloom or flare. Minimal, diagrammatic, no letters."
+    }
+  ]
+}
