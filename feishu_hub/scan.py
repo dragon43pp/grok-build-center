@@ -1021,6 +1021,10 @@ TEMPLATE = """<!DOCTYPE html>
   <div class="sub">
     生成于 __GENERATED__ ·
     扫描 <code>~/.grok</code> · <code>~/.codex</code> · <code>~/.claude</code> · <code>~/.local/share/opencode</code>
+    <br>
+    这一页是<b>全文检索</b>：跨 4 家 CLI，正文都嵌进来了，用来找「那件事到底在哪场会话里说过」。<br>
+    要看 <b>Grok 会话管理台</b>（recap 回顾 / 代码漂移 / 正在运行 / 恢复命令），跑
+    <code>python tools/sessions.py html</code>。
   </div>
 
   <div class="cards" id="cards">__CARDS__</div>

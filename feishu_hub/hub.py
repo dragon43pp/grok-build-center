@@ -583,9 +583,42 @@ class Hub:
             if changed or fresh:
                 self.request_refresh()
 
+    @staticmethod
+    def _hook_port_busy(port: int, timeout: float = 0.4) -> bool:
+        """端口上有没有人在听。用「连一下」而不是 bind 试探 —— bind 在 Windows
+        上永远会「成功」，试探不出任何东西。连上就说明有服务，连不上就没人。"""
+        import socket
+        sock = socket.socket()
+        sock.settimeout(timeout)
+        try:
+            sock.connect(("127.0.0.1", int(port)))
+            return True
+        except OSError:
+            return False
+        finally:
+            sock.close()
+
     def start_hook_server(self) -> None:
         """本机 hook 接收端点。CLI 的 hook 往这里 POST，就能上报「等你确认」。"""
         hub = self
+
+        # **Windows 上必须先探一下端口。**
+        # Python 的 HTTPServer 默认 allow_reuse_address=True（对应 SO_REUSEADDR），
+        # 而 Windows 的 SO_REUSEADDR 语义跟 Linux **相反**：它允许两个进程同时绑定
+        # **同一个**端口，而不是「等 TIME_WAIT 过去」。后果是第二个实例会安安静静地
+        # 「绑定成功」，然后两个进程**抢着接**同一端口的连接 —— 谁接到不确定。
+        # 于是 CLI 上报的「等你确认」会被另一个实例吃掉，面板上什么都不显示，
+        # 而且**两个实例都认为自己工作正常**。这类问题极难排查（2026-09-28 踩到：
+        # 一个残留的测试进程占着 8791，导致新进程的 hook 全部失踪）。
+        # 所以这里先连一下：连得上就说明有别人在收，明确告警。
+        if self._hook_port_busy(self.cfg.hook_port):
+            print(f"[warn] 端口 {self.cfg.hook_port} 上已经有别的进程在收 hook 了。",
+                  file=sys.stderr)
+            print("[warn] Windows 允许重复绑定同一端口，两边会**抢着接**连接，"
+                  "CLI 上报的事件可能被那个进程吃掉，本面板就看不到「等你确认」。",
+                  file=sys.stderr)
+            print("[warn] 建议先关掉那个进程（另一个面板实例 / 残留的测试进程）再启动。",
+                  file=sys.stderr)
 
         class Handler(BaseHTTPRequestHandler):
             protocol_version = "HTTP/1.1"

@@ -5,12 +5,14 @@
 <h1 align="center">Grok Build Pager</h1>
 
 <p align="center">
-  <b>Grok Build 会话面板 —— 卡住了，它呼你。</b><br>
-  多个 Grok Build 并行跑，哪一个在等你确认，一眼看到，手机上也能放行。
+  <b>Grok Build 会话面板 —— 卡住了它呼你，几百场旧会话也找得回、接得上。</b><br>
+  跨项目管理 · 分叉与接续继承 · 带代码漂移检测的恢复。<br>
+  哪一个在等你确认，一眼看到；手机上也能当场放行。
 </p>
 
 <p align="center">
   <a href="#快速开始"><b>快速开始</b></a> ·
+  <a href="#会话的管理--继承--恢复"><b>管理 / 继承 / 恢复</b></a> ·
   <a href="docs/brand.md">设计规范</a> ·
   <a href="#已知没做的">已知限制</a>
 </p>
@@ -76,6 +78,122 @@ Pager 就是干这个的：**替你盯着，卡住了就呼你。**
 
 ---
 
+## 会话的管理 · 继承 · 恢复
+
+「卡住了它呼你」管的是**当下**。真正每天都在疼的是**长期**：
+几个月下来 `~/.grok/sessions` 里躺着几百场会话 —— 你记得做过，但**找不到、接不回、也不敢接**。
+
+grok 自己的 `grok sessions list | search | delete` 和 `session_search.sqlite`（FTS5 索引）
+其实**都在**。但实测（2026-09-28，本机 51 场会话）有三个硬伤：
+
+| | `grok sessions list -n 8` | 本项目 `tools/sessions.py list` |
+| --- | --- | --- |
+| 耗时 | **5.3 秒**（每次拉起 leader 进程） | **17 毫秒**（只读 `summary.json`） |
+| 范围 | 只列**当前目录**的会话 | 跨全部 24 个工作目录 |
+| 中文检索 | `search 小程序` → **超时，返回 0 条** | 正常命中 |
+
+所以这一层只做一件事：**把 grok 已经做好、却埋在 CLI 里的能力挖出来，跨项目聚合、毫秒级呈现。**
+全部只读，不动 grok 任何文件。
+
+### 管理：跨项目会话目录
+
+`summary.json` 里 grok 自己写了一堆元数据，但现存工具基本只读了标题和时间。
+这里全部挖出来：
+
+| 字段 | 有什么用 |
+| --- | --- |
+| `last_recap` / `last_turn_summary` | **grok 自己压缩出的会话回顾** —— 恢复时最值钱的两个字段 |
+| `head_commit` + `head_branch` + `git_remotes` | 这场会话是在**哪个代码版本**上做的 |
+| `current_model_id` / `agent_name` | 用的什么模型、什么 agent |
+| `num_chat_messages` | 真实对话轮数（`num_messages` 混了 reasoning，不能用） |
+| `~/.grok/active_sessions.json` | **正在运行**的会话 —— 含 pid，过了存活校验才算数 |
+
+```cmd
+python tools\sessions.py list --recap -n 30
+python tools\sessions.py search 云函数 部署        :: 空格 = AND
+python tools\sessions.py list --project 小程序 --not-empty
+```
+
+### 继承：分叉，或把上下文交给一场新会话
+
+**两条路，解决同一个问题：不想在旧会话上接着开。**
+
+`--fork-session` 是 grok 原生的 —— 从任意一场会话岔出去试新方向，**原会话一个字不改**。
+适合「想试另一条路，但别弄脏现在这版」。
+
+**接续（handoff）** 解决的是一个更硬的约束：
+
+> 恢复的代价跟历史长度**强相关且非线性**。实测：60 KB 的会话 **19 秒**回来，
+> 1547 KB 的**600 秒仍不返回**。从 60 KB 到 1.5 MB，就是「十几秒」到「十几分钟」。
+
+所以对大会话，`-r` 约等于「点了就卡十几分钟」。而**新会话吃一段 recap 是秒开的**。
+`handoff` 把旧会话压成一小段提示词：
+
+```cmd
+python tools\sessions.py handoff 01a0bee1 --ask "把发布流程补完"
+```
+
+它**只放结论，不放过程** —— recap 已经是 grok 压出来的干货，把 `chat_history`
+塞回去只会重新撑爆上下文，等于白折腾。结尾固定一句：
+
+> 先复述理解 → 列 3 件要做的事 → **不要修改任何文件** → 等我确认再动手
+
+因为接续失败最贵的形态，就是 AI 拿着半懂的状态直接改文件。
+
+### 恢复：点之前就知道要等多久
+
+```cmd
+python tools\sessions.py recover 造书成剧
+```
+
+```
+  体量：1.2 MB · 135 轮对话
+  代码：仓库已经往前走了：会话停在 codex/writer-dream-v7 @ 49528037，
+        现在是 codex/writer-dream-v7 @ fa235ee1。AI 记忆里的代码可能已经过时。
+  预期：历史很大（1.2 MB），续跑可能要十几分钟
+  ! 代码已在会话之后变动，恢复前建议看一眼 diff
+```
+
+**代码漂移检测是别人没有的一件事。** grok 把 `head_commit` 写进了 `summary.json`，
+但**没有任何地方拿它跟现在的仓库比过**。后果很实在：你三天后 `-r` 继续一场会话，
+如果这期间仓库已经往前合了 20 个提交，AI 是在**它记忆里的旧代码**上做判断 ——
+它说的「这个文件里有 X 函数」可能早就不成立了。
+
+真需要回到当时的代码，grok 原生支持**连代码快照一起恢复**：
+
+```cmd
+python tools\sessions.py restore-code 01a0bee1
+```
+
+`--restore-code` 有个坑：**必须配 `--worktree`，单独用会被直接拒绝** ——
+
+```
+Error: --restore-code on a remote session requires --worktree
+(refusing to check out snapshot code into the current directory)
+```
+
+这不是限制，是保护：它**永远不往你当前目录里签出**，而是把快照铺到一个新 worktree，
+你手头没提交的改动不会被冲掉。本工具会自动把 `-w` 补上。
+
+### 两张离线 HTML，管两件事
+
+```cmd
+python tools\sessions.py html -o sessions.html        :: 会话管理台（这个）
+python -m feishu_hub.scan --out session-history.html  :: 全文检索页
+```
+
+| | 会话管理台（`sessions.py html`） | 全文检索页（`scan.py --out`） |
+| --- | --- | --- |
+| 回答 | 「这些会话现在什么状态、该恢复哪一个」 | 「那件事到底在哪场会话里说过」 |
+| 覆盖 | 只 grok，但字段最深（recap / 漂移 / 在跑 / 体量） | 跨 4 家 CLI |
+| 装什么 | **不嵌正文**，卡片式，带可复制的恢复命令 | 嵌入每场最多 12000 字正文，表格 + 全文搜索 |
+| 视觉 | 珊瑚品牌色，只有在跑那一场发光 | 中性蓝，表格优先 |
+
+管理台纯本地、**零外链**（断网、丢进邮件附件都能看），自带搜索框。
+珊瑚色**只给正在运行的那一场**；代码漂移这类警示走中性琥珀，不跟那颗灯抢注意力。
+
+---
+
 ## 快速开始
 
 ```cmd
@@ -92,10 +210,13 @@ run.cmd                      :: 启动
 飞书是**可选的外挂**，不是前提。这几条全离线：
 
 ```cmd
-run.cmd --print              :: 本机状态表格（最快看到效果的一条）
-python -m feishu_hub.hrack   :: 看 HRack 通道读到了什么
-python tools\smoke_test.py   :: 203 项离线自检，不联网不建应用
-python tools\card_preview.py :: 生成 card-preview.html，浏览器打开，按钮能点
+run.cmd --print                            :: 本机状态表格（最快看到效果的一条）
+python tools\sessions.py --recap           :: 跨项目会话目录（17 毫秒扫完全部）
+python tools\sessions.py drift             :: 哪些会话的记忆已经跟代码对不上了
+python tools\sessions.py html -o a.html    :: 离线 HTML 报告，断网可看
+python -m feishu_hub.hrack                 :: 看 HRack 通道读到了什么
+python tools\smoke_test.py                 :: 292 项离线自检，不联网不建应用
+python tools\card_preview.py               :: 生成 card-preview.html，浏览器打开，按钮能点
 ```
 
 **先跑 `run.cmd --print`。** 它不联网、不需要任何配置，
@@ -114,6 +235,10 @@ python tools\card_preview.py :: 生成 card-preview.html，浏览器打开，按
 
 几百场会话在卡片上要翻几十页，手机上点到手酸。所以**表格才是「看全部」的地方**，
 卡片负责「现在哪几件要紧事 + 一键回到现场」。**两个都免费。**
+
+第四个视图是**离线 HTML 报告**（`python tools\sessions.py html`）——
+它不是「现在」，而是「这些日子」：全部项目、全部会话一页摊开，带搜索框，断网也能看。
+飞书卡片有 30 KB 上限、多维表格要联网，只有它能塞进邮件附件发给别人。
 
 ### 卡片上能干什么
 
@@ -391,6 +516,7 @@ grok-build-pager/
 ├─ feishu_hub/
 │  ├─ scan.py                 扫本机各家 CLI 的会话库 → 统一记录
 │  ├─ procs.py                扫存活进程，按 (CLI, 目录) 匹配
+│  ├─ groksessions.py         ★ Grok 会话深索引：管理 / 分叉 / 接续 / 漂移 / 体检
 │  ├─ hrack.py                ★ HRack 通道：事件流 + Bridge 命名管道
 │  ├─ state.py                历史 + 进程 + HRack + hook 四源合并成统一快照
 │  ├─ cards.py                飞书卡片 JSON 2.0 构造
@@ -401,7 +527,9 @@ grok-build-pager/
 │  └─ hub.py                  主程序：面板发布、回调分发、hook 端点、后台刷新
 └─ tools/
    ├─ setup.py                一键安装向导（建表 / 拿 id / 写配置）
-   ├─ smoke_test.py           203 项离线冒烟测试，不联网不建应用
+   ├─ sessions.py             ★ 会话命令行：list / search / recover / fork / handoff / drift / html
+   ├─ sessions_html.py        ★ 离线 HTML 报告渲染（零外链）
+   ├─ smoke_test.py           292 项离线冒烟测试，不联网不建应用
    ├─ make_icon.py            生成自己的图标（纯 Python，零依赖）
    ├─ make_start_menu.py      装 / 卸 Windows 开始菜单入口
    ├─ gen_assets.py           用 gpt-image-2 批量出视觉资产
@@ -422,13 +550,18 @@ grok-build-pager/
 python tools\smoke_test.py
 ```
 
-**203 项检查，不联网、不建飞书应用**，把整条链路跑一遍：
+**292 项检查，不联网、不建飞书应用**，把整条链路跑一遍：
 
 - 快照 / 卡片发布 / 筛选分页 / 卡片回调 / hook 端点 / 参数校验
 - **HRack 通道**：6 种事件、状态迁移、增量读、压缩重写后重读、坏行跳过、快照合并优先级、僵尸进程
 - **多维表格同步的幂等性** —— 这块写错会把 343 行反复插成双份，而且不报错，
   只会在表里慢慢堆垃圾。所以单独测了：原样重同步 0 新增 0 更新、只推变化行、
   会话消失删行、本地索引丢了从表里读回不重插、超批量上限自动分批
+- **会话索引**：纳秒时间戳、中文列宽对齐、AND 检索、id 前缀消歧（**歧义必须返回「不唯一」而不是瞎猜**）、
+  git HEAD 三种形态（loose ref / packed-refs / worktree 的 `gitdir:` 文件）、
+  五种漂移状态、体量分档、正在运行的会话要警告但不阻断、
+  `--restore-code` 自动补 `--worktree`、接续提示词必带「不要修改文件」、
+  HTML 报告零外链 + XSS 转义
 
 先把代码逻辑钉死，再去连真飞书 —— 这样出问题一定是后台配置的锅。
 
@@ -530,9 +663,19 @@ lark-cli api GET /open-apis/application/v6/applications/<app_id>/app_versions/<o
   想要流式回传得改成长连接推送中间态，没做。
 - **续跑跑的是「本机终端里那场会话」之外的另一条路径**（Bridge 投喂除外）。
   TUI 里正在跑的那场和飞书发起的无头那一轮是两回事 —— 想让它们同步，只能二选一。
-- **大会话续跑会超时，没有降级方案**。实测 1.5 MB 历史的会话 600 秒仍没回来，
-  超过 `remote_timeout`（默认 900 秒）就报失败。没做「只带最近 N 轮去续跑」这类绕法 ——
-  那样会改变会话上下文，风险更大。
+- **大会话直接 `-r` 续跑仍会超时**。实测 1.5 MB 历史的会话 600 秒仍没回来，
+  超过 `remote_timeout`（默认 900 秒）就报失败。
+  **绕法是走 `handoff`（新会话吃 recap，不重放历史）**，但那条路是「另起一场会话」，
+  不是「在原来那场里继续」—— 上下文是 recap 而不是完整历史，AI 看不到中间细节。这个差别要自己权衡。
+- **`handoff` 的质量上限就是 recap 的质量**。recap 是 grok 自己压的，
+  如果它压丢了关键约束，接续出来的会话也会缺这块 —— 提示词里已经加了「指出可疑或缺失的地方」
+  让 AI 主动问，但没法保证。
+- **代码漂移只能判「变没变」，判不出「变了多少」**。`head_commit` 对不上时我们只能告诉你
+  「仓库往前走了」，算不了 ahead/behind 几个提交 —— 那要 spawn git，会把 17 毫秒的扫描拖成 1.5 秒。
+- **会话索引只覆盖 grok**。codex / claude / opencode 的会话仍在 `scan.py` 里做基础索引
+  （标题 + 时间 + 轮数），没有 recap / git 漂移这些深度字段 —— 那几家的会话文件里根本没写这些。
+- **`grok sessions delete` 没接**。删除不可逆，而 `summary.json` 里没有任何「软删除」标记可回滚 ——
+  所以这条能力只在 CLI 里，本工具一律不碰。
 - **codex 续跑用的是 codex 自己的默认模型**，不是会话当初的模型。
   `codex exec resume` 没有 `-m` 参数，只能 `-c model="..."`，所以没做成自动跟随。
 - **群公告 API 不存在**，所以没法把面板自动放进群公告，只能手动置顶。

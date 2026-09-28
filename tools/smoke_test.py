@@ -23,6 +23,7 @@ import tempfile
 import threading
 import time
 import urllib.request
+from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -997,6 +998,274 @@ def test_hrack_channel() -> None:
     shutil.rmtree(tmp, ignore_errors=True)
 
 
+def test_session_store() -> None:
+    print("\n[36] 会话索引：时间解析 / 显示宽度 / 检索 / 消歧")
+    from feishu_hub import groksessions as gs
+
+    # --- 纳秒时间戳。grok 写的是 9 位小数，fromisoformat 在旧版本上会直接炸。
+    ts = gs.parse_iso("2026-09-22T13:42:17.343922400Z")
+    expect = datetime(2026, 9, 22, 13, 42, 17, 343922, tzinfo=timezone.utc).timestamp()
+    check("纳秒 ISO 能解析", abs(ts - expect) < 0.01, f"{ts} vs {expect}")
+    check("空串得 0", gs.parse_iso("") == 0.0)
+    check("垃圾串得 0 不抛", gs.parse_iso("不是时间") == 0.0)
+    check("无 Z 也当 UTC",
+          abs(gs.parse_iso("2026-09-22T13:42:17") -
+              datetime(2026, 9, 22, 13, 42, 17, tzinfo=timezone.utc).timestamp()) < 0.01)
+
+    # --- 显示宽度：中文算 2 列，否则中文列会整体歪掉
+    check("中文算 2 宽", gs._disp_width("中文") == 4)
+    check("ASCII 算 1 宽", gs._disp_width("abc") == 3)
+    check("混排宽度", gs._disp_width("a中b") == 4)
+    check("不超宽就原样返回", gs.trunc_disp("短", 10) == "短")
+    cut = gs.trunc_disp("中" * 20, 11)
+    check("截断后不超宽", gs._disp_width(cut) <= 11, f"{gs._disp_width(cut)}")
+    check("截断带省略号", cut.endswith("…"))
+
+    # --- 检索：空格分隔 = AND
+    def mk(sid, title, recap="", cwd="D:\\x"):
+        return gs.GrokSession(sid=sid, cwd=cwd, sdir="", title=title, recap=recap)
+
+    rows = [mk("01a", "云函数部署", "把 21 个云函数传上去了"),
+            mk("01b", "首页还原", "改了导航栏"),
+            mk("01c", "云函数调试", "登录失败")]
+    check("单词命中 2 场", len(gs.search(rows, "云函数")) == 2)
+    check("AND 语义只留 1 场", len(gs.search(rows, "云函数 部署")) == 1)
+    check("搜 recap 也能中", len(gs.search(rows, "导航栏")) == 1)
+    check("搜路径能中", len(gs.search(rows, "D:\\x")) == 3)
+    check("大小写不敏感", len(gs.search([mk("01d", "Fix Bug", cwd="D:\\A")], "fix")) == 1)
+    check("空查询返回全部", len(gs.search(rows, "")) == 3)
+    check("搜不到就是空", gs.search(rows, "不存在的词") == [])
+
+    # --- 消歧：认不出来时必须返回 None，不能瞎猜（猜错就是在错会话上执行续跑）
+    check("完整 id 直认", gs.resolve(rows, "01a").sid == "01a")
+    check("id 前缀直认", gs.resolve(rows, "01b").sid == "01b")
+    check("标题唯一就直认", gs.resolve(rows, "首页还原").sid == "01b")
+    check("标题歧义返回 None", gs.resolve(rows, "云函数") is None)
+    check("前缀歧义返回 None", gs.resolve(rows, "01") is None)
+    check("UUID 形状但不存在 → None", gs.resolve(
+        rows, "00000000-0000-0000-0000-000000000000") is None)
+    check("歧义时列得出候选", len(gs.ambiguous(rows, "云函数")) == 2)
+
+    print("\n[37] git 状态：纯读文件（不 spawn git），含 worktree / packed-refs")
+    tmp = tempfile.mkdtemp(prefix="gbp-git-")
+    try:
+        sha = "a" * 40
+        repo = os.path.join(tmp, "repo")
+        os.makedirs(os.path.join(repo, ".git", "refs", "heads"))
+        with open(os.path.join(repo, ".git", "HEAD"), "w", encoding="utf-8") as fh:
+            fh.write("ref: refs/heads/main\n")
+        with open(os.path.join(repo, ".git", "refs", "heads", "main"), "w",
+                  encoding="utf-8") as fh:
+            fh.write(sha + "\n")
+        check("读出 loose ref", gs.read_git_head(repo) == (sha, "main"))
+
+        # packed-refs：clone 过的大仓库 ref 都是打包的，loose 文件不存在
+        repo2 = os.path.join(tmp, "packed")
+        os.makedirs(os.path.join(repo2, ".git"))
+        with open(os.path.join(repo2, ".git", "HEAD"), "w", encoding="utf-8") as fh:
+            fh.write("ref: refs/heads/dev\n")
+        with open(os.path.join(repo2, ".git", "packed-refs"), "w",
+                  encoding="utf-8") as fh:
+            fh.write("# pack-refs with: peeled fully-peeled sorted\n")
+            fh.write(f"{'b' * 40} refs/heads/dev\n")
+            fh.write(f"{'c' * 40} refs/heads/main\n")
+        check("读出 packed ref", gs.read_git_head(repo2) == ("b" * 40, "dev"))
+
+        # worktree / submodule：`.git` 是文件，内容是 `gitdir: <路径>`
+        wt = os.path.join(tmp, "wt")
+        os.makedirs(wt)
+        real = os.path.join(tmp, "real-git")
+        os.makedirs(os.path.join(real, "refs", "heads"))
+        with open(os.path.join(real, "HEAD"), "w", encoding="utf-8") as fh:
+            fh.write("ref: refs/heads/feat\n")
+        with open(os.path.join(real, "refs", "heads", "feat"), "w",
+                  encoding="utf-8") as fh:
+            fh.write("d" * 40 + "\n")
+        with open(os.path.join(wt, ".git"), "w", encoding="utf-8") as fh:
+            fh.write(f"gitdir: {real}\n")
+        check("认出 worktree 的 gitdir 文件",
+              gs.read_git_head(wt) == ("d" * 40, "feat"))
+
+        # detached HEAD
+        det = os.path.join(tmp, "det")
+        os.makedirs(os.path.join(det, ".git"))
+        with open(os.path.join(det, ".git", "HEAD"), "w", encoding="utf-8") as fh:
+            fh.write("e" * 40 + "\n")
+        check("detached HEAD 读出无分支", gs.read_git_head(det) == ("e" * 40, ""))
+
+        check("不是仓库 → 空", gs.read_git_head(tmp) == ("", ""))
+        check("目录不存在 → 空", gs.read_git_head(os.path.join(tmp, "没这个")) == ("", ""))
+
+        print("\n[38] 代码漂移：会话停在哪个提交 vs 仓库现在走到哪")
+        live_repo = os.path.join(tmp, "live")
+        os.makedirs(os.path.join(live_repo, ".git", "refs", "heads"))
+        with open(os.path.join(live_repo, ".git", "HEAD"), "w", encoding="utf-8") as fh:
+            fh.write("ref: refs/heads/main\n")
+        with open(os.path.join(live_repo, ".git", "refs", "heads", "main"), "w",
+                  encoding="utf-8") as fh:
+            fh.write("9" * 40 + "\n")
+
+        clean = gs.GrokSession(sid="x", cwd=live_repo, sdir="", git_root=live_repo,
+                               head_commit="9" * 40, head_branch="main")
+        check("同提交 → clean", gs.drift(clean).state == "clean", gs.drift(clean).state)
+        check("clean 是 ok 的", gs.drift(clean).ok)
+
+        moved = gs.GrokSession(sid="x", cwd=live_repo, sdir="", git_root=live_repo,
+                               head_commit="7" * 40, head_branch="main")
+        d = gs.drift(moved)
+        check("不同提交 → moved", d.state == "moved")
+        check("moved 带上两个提交", d.was == "7" * 40 and d.now == "9" * 40)
+        check("moved 不是 ok", not d.ok)
+
+        gone = gs.GrokSession(sid="x", cwd=os.path.join(tmp, "已删"), sdir="",
+                              git_root=os.path.join(tmp, "已删"), head_commit="7" * 40)
+        check("仓库被删 → missing-repo", gs.drift(gone).state == "missing-repo")
+
+        nogit = gs.GrokSession(sid="x", cwd=tmp, sdir="", git_root=tmp,
+                               head_commit="7" * 40)
+        check("目录在但不是仓库 → no-repo", gs.drift(nogit).state == "no-repo")
+
+        unknown = gs.GrokSession(sid="x", cwd=tmp, sdir="")
+        check("没记录提交 → unknown", gs.drift(unknown).state == "unknown")
+
+        print("\n[39] 恢复体检：跑不了 / 要等多久 / 正在跑")
+        empty_body = gs.GrokSession(sid="01a", cwd=live_repo, sdir="", body_bytes=0,
+                                    head_commit="9" * 40)
+        check("小会话不提示等待", gs.preflight(empty_body).cost_note == "")
+        heavy = gs.GrokSession(sid="01a", cwd=live_repo, sdir="",
+                               body_bytes=gs.LIGHT_BYTES,
+                               head_commit="9" * 40)
+        check("400 KB 起提示", "几分钟" in gs.preflight(heavy).cost_note)
+        huge = gs.GrokSession(sid="01a", cwd=live_repo, sdir="",
+                              body_bytes=gs.HEAVY_BYTES,
+                              head_commit="9" * 40)
+        check("1 MB 起提示十几分钟", "十几分钟" in gs.preflight(huge).cost_note)
+        check("体量分档", (heavy.weight, huge.weight) == ("heavy", "huge"))
+
+        no_cwd = gs.GrokSession(sid="01a", cwd=os.path.join(tmp, "没这个"), sdir="")
+        check("目录不存在 → 不可跑", not gs.preflight(no_cwd).runnable)
+        bad_sid = gs.GrokSession(sid="有 空格/斜杠", cwd=live_repo, sdir="")
+        check("非法 sid → 不可跑", not gs.preflight(bad_sid).runnable)
+
+        running = gs.GrokSession(sid="01a", cwd=live_repo, sdir="", live_pid=12345,
+                                 head_commit="9" * 40)
+        pre = gs.preflight(running)
+        check("正在跑也警告", any("正在运行" in w for w in pre.warnings))
+        check("正在跑不阻塞（只警告）", pre.runnable)
+        moved_pre = gs.preflight(gs.GrokSession(sid="01a", cwd=live_repo, sdir="",
+                                                head_commit="7" * 40))
+        check("代码漂移进 warnings", any("已经往前走了" in w or "变动" in w
+                                        for w in moved_pre.warnings))
+
+        print("\n[40] 恢复命令：argv 数组 + 两条硬约束")
+        s = gs.GrokSession(sid="01a0ce08-da0e-76e1-a03b-72a6c9aa66f5",
+                           cwd="D:\\微信小程序\\言值顾问", sdir="")
+        argv = gs.resume_argv(s)
+        check("argc 数组不是字符串", isinstance(argv, list) and all(
+            isinstance(x, str) for x in argv))
+        check("必须带 --cwd", "--cwd" in argv and s.cwd in argv)
+        check("带上 -r 和 sid", "-r" in argv and s.sid in argv)
+        check("默认不带 fork", "--fork-session" not in argv)
+        check("默认不带 restore-code", "--restore-code" not in argv)
+
+        fargv = gs.resume_argv(s, fork=True, fork_sid="11111111-2222-3333-4444-555555555555")
+        check("fork 带 --fork-session", "--fork-session" in fargv)
+        check("fork 带 -s 新 id", "-s" in fargv and
+              "11111111-2222-3333-4444-555555555555" in fargv)
+        try:
+            gs.resume_argv(s, fork=True, fork_sid="不是-uuid")
+            check("非法 fork id 要报错", False, "没抛异常")
+        except ValueError:
+            check("非法 fork id 要报错", True)
+
+        # 这条是实测踩出来的：只给 --restore-code 会被 grok 直接拒绝
+        #   Error: --restore-code on a remote session requires --worktree
+        rargv = gs.resume_argv(s, restore_code=True)
+        check("restore-code 自动补 --worktree",
+              "--restore-code" in rargv and ("-w" in rargv or "--worktree" in rargv),
+              " ".join(rargv))
+        check("restore_argv 同款", "-w" in gs.restore_argv(s))
+
+        print("\n[41] 继承：接续提示词 / 新会话 argv")
+        src = gs.GrokSession(
+            sid="01a0bee1-0298-7583-b41a-7818f5060200", cwd="D:\\微信小程序\\造书成剧",
+            sdir="", title="造书成剧缺陷修复", model="grok-4.7", agent="grok-build-plan",
+            num_chat_messages=135, body_bytes=gs.HEAVY_BYTES,
+            last_turn="贴图话题文案已备好，待发布。",
+            recap="把精选选段扩成十四段长原文。",
+            git_root="", git_remotes=["https://github.com/dragon43pp/zaoshuchengju.git"],
+            head_commit="4" * 40, head_branch="codex/writer-dream-v7")
+        p = gs.handoff_prompt(src, ask="把发布流程补完")
+        for must in ("造书成剧缺陷修复", "贴图话题文案已备好", "把精选选段扩成十四段",
+                     "把发布流程补完", "135 轮对话", "不要修改任何文件"):
+            check(f"提示词含「{must[:14]}」", must in p)
+        check("提示词带上工作目录", src.cwd in p)
+        check("提示词带上会话结束时的提交", "44444444" in p)
+        check("没给 ask 时没有「接下来」段",
+              "## 接下来要做的" not in gs.handoff_prompt(src))
+        check("能不塞 recap", "把精选选段扩成十四段" not in
+              gs.handoff_prompt(src, include_recap=False))
+        check("能不塞 git", "github.com/dragon43pp" not in
+              gs.handoff_prompt(src, include_git=False))
+        # 提示词不能太长 —— 接续的意义就是短，长了自己也变成要重放的历史
+        check("提示词 < 2000 字（长会话才划算）", len(p) < 2000, f"{len(p)} 字")
+
+        nargv = gs.new_session_argv(src, "接续提示词", model="grok-4.7")
+        check("新会话不带 -r", "-r" not in nargv)
+        check("新会话带 --cwd", "--cwd" in nargv)
+        check("新会话把 prompt 作为独立元素", nargv[-1] == "接续提示词")
+        check("新会话能换模型", "--model" in nargv)
+        check("fork_sid 是合法 UUID", bool(gs.UUID_RE.match(gs.fork_sid())))
+
+        print("\n[42] 离线 HTML 报告：自包含、转义、不超预算")
+        from tools import sessions_html
+        import re as _re
+        html = sessions_html.render([src, clean, moved])
+        check("有 DOCTYPE", html.startswith("<!DOCTYPE html>"))
+        # 只查「会真去加载外部东西」的写法。别用 'http://' 做子串判断 ——
+        # SVG 的 xmlns="http://www.w3.org/2000/svg" 会被误伤（那不是网络请求）。
+        ext = (_re.findall(r'(?:src|href)\s*=\s*["\']https?://', html)
+               + _re.findall(r'@import|url\(\s*["\']?https?://', html))
+        check("没有外链资源（离线可看）", not ext, str(ext[:2]))
+        check("跟随深浅色", "prefers-color-scheme" in html)
+        check("中文标题渲染进去了", "造书成剧缺陷修复" in html)
+        check("搜索框在", 'id="q"' in html)
+        check("珊瑚色只用来点灯", sessions_html.CORAL.lower() in html.lower())
+        # XSS：标题里塞标签必须被转义，否则一份本地报告就能变成注入点
+        evil = gs.GrokSession(sid="01e", cwd="D:\\x", sdir="",
+                              title='<img src=x onerror=alert(1)>')
+        evil_html = sessions_html.render([evil])
+        check("标题里的 HTML 被转义", "<img src=x" not in evil_html)
+        check("实体转义生效", "&lt;img" in evil_html)
+        check("报告体积可控", len(html) / 1024 < 400, f"{len(html) / 1024:.0f} KB")
+
+        print("\n[43] 真机只读自检：扫本机会话库（没有就跳过）")
+        real = gs.load_all()
+        if not real:
+            print("  （跳过：本机没有 grok 会话）")
+        else:
+            check(f"扫到 {len(real)} 场会话", len(real) > 0)
+            check("按最近活跃倒序",
+                  all(real[i].active_ts >= real[i + 1].active_ts
+                      for i in range(len(real) - 1)))
+            check("每场都有 sid 和 cwd 至少其一",
+                  all(s.sid and (s.cwd is not None) for s in real))
+            check("空会话也能读出来不抛",
+                  all(s.body_bytes >= 0 for s in real))
+            t0 = time.time()
+            gs.load_all()
+            dt = (time.time() - t0) * 1000
+            # `grok sessions list -n 8` 实测 5300 ms，我们这条路必须快到不像话
+            check(f"全量扫描 < 500 ms（实测 {dt:.0f} ms）", dt < 500)
+            with_live = [s for s in real if s.live]
+            print(f"  （本机 {len(real)} 场 · {len(with_live)} 场正在跑 · "
+                  f"{len(gs.group_by_project(real))} 个项目）")
+            if real[0].recap or real[0].last_turn:
+                check("详情渲染得出来", "可以这么用" in gs.render_detail(real[0]))
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 def main() -> int:
     print("=" * 68)
     print("Grok Build Pager · 离线冒烟测试（不联网、不建飞书应用）")
@@ -1011,6 +1280,7 @@ def main() -> int:
     test_remote()
     test_bitable_sync()
     test_hrack_channel()
+    test_session_store()
 
     print("\n" + "=" * 68)
     print(f"通过 {PASS} · 失败 {FAIL}")
