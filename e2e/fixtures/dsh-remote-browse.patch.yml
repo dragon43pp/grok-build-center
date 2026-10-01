@@ -1,0 +1,15 @@
+# HRack marks its managed host as an embedded/remote launch, so DSH's official
+# auto picker selects browse. The product layer must not insert a second copy
+# when a user profile already pins the same official browse implementation.
+# It only restores the official command-line -> Web runtime -> API trust chain
+# after profile/user layers so the public authority is actually accepted.
+- id: web-runtime
+  inject:
+    - webStartup
+  config:
+    trustedHosts: !!js ctx.webStartup.trustedHosts
+- id: connection
+  inject:
+    - webRuntime
+  config:
+    trustedHosts: !!js ctx.webRuntime.trustedHosts

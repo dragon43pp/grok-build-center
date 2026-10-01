@@ -1,0 +1,4 @@
+interface:
+  display_name: "Grok Build Center Floating Renderer Creator"
+  short_description: "Build state-driven Grok Build Center floating windows and Live2D companions"
+  default_prompt: "Use $create-gbc-floating-renderer to build or update a sandboxed Grok Build Center floating renderer driven by real CLI turn state."

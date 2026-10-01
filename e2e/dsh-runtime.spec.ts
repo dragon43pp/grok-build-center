@@ -1,0 +1,750 @@
+import { expect, test } from '@playwright/test'
+import { execFileSync } from 'node:child_process'
+import { existsSync } from 'node:fs'
+import { createServer } from 'node:http'
+import { join, resolve } from 'node:path'
+import {
+  DSH_CLI_DEFINITION_ID,
+  DSH_COMPATIBLE_VERSION,
+  cliDefinitions
+} from '../electron/ai-cli-discovery'
+import {
+  DSH_EMBED_SSH_CONNECTION,
+  DSH_WSL_PID_MARKER,
+  buildDshExternalSpawnSpec,
+  dshRejectedNoOpenOption,
+  dshWebOpensBrowserByDefault,
+  dshWebRuntimeArgs,
+  selectDshRuntimeCandidates
+} from '../electron/dsh-host/DshRuntime'
+import { parseDshBootManifestEntries } from '../electron/dsh-host/RemoteDshPreflight'
+import {
+  dshAuthenticatedPageUrl,
+  exchangeDshLaunchToken,
+  parseDshLaunchToken,
+  parseDshSessionCookie,
+  redactDshLaunchToken
+} from '../electron/dsh-host/DshBrowserAuth'
+import type { DshRuntimeCandidate } from '../shared/dsh-ipc'
+import {
+  resolveGbcUserDataDir,
+  resolveNativeDshHome,
+  resolveWslDshHome
+} from '../electron/app-paths'
+import { e2eDshExecutable, launchApp, openSettings } from './helpers'
+
+const windowsCandidate: DshRuntimeCandidate = {
+  id: 'dsh:windows',
+  kind: 'installation',
+  runtime: { kind: 'host', platform: 'windows' },
+  resolvedExecutable: 'C:\\Users\\Test User\\AppData\\Roaming\\npm\\dsh.cmd',
+  version: DSH_COMPATIBLE_VERSION
+}
+
+const wslCandidate: DshRuntimeCandidate = {
+  id: 'dsh:wsl-ubuntu',
+  kind: 'installation',
+  runtime: { kind: 'wsl', distro: 'Ubuntu-24.04' },
+  resolvedExecutable: '/home/test/.local/bin/dsh',
+  version: DSH_COMPATIBLE_VERSION
+}
+
+test('DSH is discovered as a hidden runtime with a version-reporting probe', () => {
+  const definition = cliDefinitions.find(
+    (item) => item.id === DSH_CLI_DEFINITION_ID
+  )
+  expect(definition).toBeDefined()
+  expect(definition?.exposeInLauncher).toBe(false)
+  expect(definition).toMatchObject({ allowWslWindowsInterop: false })
+  expect(definition?.probes[0].outputPattern.test(DSH_COMPATIBLE_VERSION)).toBe(true)
+  expect(definition?.probes[0].outputPattern.test('0.1.0-rc.7')).toBe(true)
+  expect(definition?.probes[0].outputPattern.test('0.1.0-rc.8')).toBe(true)
+  expect(definition?.probes[0].outputPattern.test('command not found')).toBe(false)
+})
+
+test('dsh web suppresses the OS browser from 0.1.0-rc.7 onward', () => {
+  expect(dshWebOpensBrowserByDefault('0.1.0-rc.6')).toBe(false)
+  expect(dshWebOpensBrowserByDefault('0.1.0-rc.7')).toBe(true)
+  expect(dshWebOpensBrowserByDefault('0.1.0-rc.8')).toBe(true)
+  expect(dshWebOpensBrowserByDefault('0.1.0')).toBe(true)
+  expect(dshWebRuntimeArgs(43123, '0.1.0-rc.6')).toEqual([
+    'web', '--host', '127.0.0.1', '--port', '43123', '--no-open'
+  ])
+  expect(dshWebRuntimeArgs(43123, '0.1.0-rc.8')).toEqual([
+    'web', '--host', '127.0.0.1', '--port', '43123', '--no-open'
+  ])
+  expect(dshWebRuntimeArgs(43123, '0.1.0-rc.8', false)).toEqual([
+    'web', '--host', '127.0.0.1', '--port', '43123'
+  ])
+  expect(dshRejectedNoOpenOption("error: unknown option '--no-open'")).toBe(true)
+  expect(dshRejectedNoOpenOption('dsh web: http://127.0.0.1:8080')).toBe(false)
+})
+
+test('DSH browser auth parses the process launch token and session cookie', () => {
+  const token = 'abcdefghijklmnopqrstuvwxyz0123456789-_ABC'
+  expect(parseDshLaunchToken(`dsh web: http://127.0.0.1:51112/?token=${token}`)).toBe(token)
+  expect(
+    parseDshLaunchToken(
+      `dsh web: http://127.0.0.1:51112/?token=${token} (LAN: http://192.168.1.8:51112/?token=${token})`
+    )
+  ).toBe(token)
+  expect(
+    parseDshLaunchToken(
+      `dsh web: http://127.0.0.1:1/?token=oldtokenoldtokenold1\ndsh web: http://127.0.0.1:2/?token=${token}`
+    )
+  ).toBe(token)
+  expect(parseDshLaunchToken('dsh web: http://127.0.0.1:8080')).toBeNull()
+  expect(parseDshLaunchToken('unrelated token=abcdefghijklmnopqrstuvwxyz0123')).toBeNull()
+
+  const cookie = 'dsh-auth-abc=v1.body.sig'
+  expect(
+    parseDshSessionCookie(
+      `${cookie}; Max-Age=2592000; Path=/; HttpOnly; SameSite=Strict`
+    )
+  ).toBe(cookie)
+  expect(parseDshSessionCookie([
+    'other=1',
+    `${cookie}; Path=/`
+  ])).toBe(cookie)
+  expect(parseDshSessionCookie('session=abc')).toBeNull()
+  expect(dshAuthenticatedPageUrl('http://127.0.0.1:51112', token)).toBe(
+    `http://127.0.0.1:51112/?token=${token}`
+  )
+  expect(dshAuthenticatedPageUrl('http://127.0.0.1:51112')).toBe(
+    'http://127.0.0.1:51112/'
+  )
+  expect(
+    redactDshLaunchToken(`dsh web: http://127.0.0.1:51112/?token=${token}`)
+  ).toBe('dsh web: http://127.0.0.1:51112/?token=[redacted]')
+})
+
+test('DSH browser auth exchanges the launch token for an authority-bound cookie', async () => {
+  const token = 'abcdefghijklmnopqrstuvwxyz0123456789-_ABC'
+  const cookie = 'dsh-auth-xyz=v1.body.sig'
+  const server = createServer((req, res) => {
+    const url = new URL(req.url ?? '/', 'http://127.0.0.1')
+    if (
+      req.method === 'GET' &&
+      url.pathname === '/' &&
+      url.searchParams.get('token') === token &&
+      req.headers.host
+    ) {
+      res.writeHead(303, {
+        location: '/',
+        'set-cookie': `${cookie}; Max-Age=2592000; Path=/; HttpOnly; SameSite=Strict`
+      })
+      res.end()
+      return
+    }
+    res.writeHead(401, { 'content-type': 'text/plain' })
+    res.end('dsh web authentication required\n')
+  })
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+  const address = server.address()
+  if (!address || typeof address === 'string') {
+    server.close()
+    throw new Error('failed to bind the token-exchange fixture')
+  }
+  const baseUrl = `http://127.0.0.1:${address.port}`
+  try {
+    await expect(exchangeDshLaunchToken(baseUrl, 'short-but-wrong-token-xx')).rejects.toThrow(
+      /HTTP 401/
+    )
+    await expect(exchangeDshLaunchToken(baseUrl, token)).resolves.toBe(cookie)
+    await expect(
+      exchangeDshLaunchToken(baseUrl, token, 'dsh.example.test')
+    ).resolves.toBe(cookie)
+  } finally {
+    await new Promise<void>((resolve, reject) =>
+      server.close((error) => error ? reject(error) : resolve())
+    )
+  }
+})
+
+test('DSH boot manifest parsing follows the capability across runtime spellings', () => {
+  const manifest = JSON.stringify({
+    rev: 'test',
+    entries: [{ id: '@deepseek-ai/dsh-client-test', url: '/plugins/test.js' }]
+  })
+  for (const assignment of [
+    'window.__DSH_BOOT__ = ',
+    'globalThis.__DSH_BOOT__=',
+    'globalThis["__DSH_BOOT__"] = ',
+    "globalThis['__DSH_BOOT__']="
+  ]) {
+    expect(
+      parseDshBootManifestEntries(
+        `<html><script>${assignment}${manifest}</script></html>`
+      )
+    ).toEqual([
+      { id: '@deepseek-ai/dsh-client-test', url: '/plugins/test.js' }
+    ])
+  }
+})
+
+test('GBC paths use the new brand and share an existing DSH home', () => {
+  const appData = join('users', 'test', 'app-data')
+  const home = join('users', 'test')
+  expect(resolveGbcUserDataDir(appData, true)).toBe(join(appData, 'GBC'))
+  expect(
+    resolveNativeDshHome(
+      'shared',
+      home,
+      join(appData, 'GBC', 'dsh-home')
+    )
+  ).toBe(join(home, '.dsh'))
+  expect(resolveWslDshHome('shared', '/home/test')).toBe('/home/test/.dsh')
+  expect(resolveWslDshHome('isolated', '/home/test')).toBe(
+    '/home/test/.local/share/gbc/dsh-home'
+  )
+})
+
+test('auto prefers host then WSL and does not invent a bundled fallback', () => {
+  expect(
+    selectDshRuntimeCandidates(
+      { kind: 'auto' },
+      [wslCandidate, windowsCandidate]
+    ).map((candidate) => candidate.id)
+  ).toEqual([windowsCandidate.id, wslCandidate.id])
+  expect(selectDshRuntimeCandidates({ kind: 'auto' }, [])).toEqual([])
+  expect(
+    selectDshRuntimeCandidates(
+      { kind: 'installation', installationId: wslCandidate.id },
+      [windowsCandidate, wslCandidate]
+    )
+  ).toEqual([wslCandidate])
+  expect(() =>
+    selectDshRuntimeCandidates(
+      { kind: 'installation', installationId: 'missing' },
+      [windowsCandidate]
+    )
+  ).toThrow(/no longer available/)
+})
+
+test('external launch preserves native and WSL runtime boundaries', () => {
+  const windows = buildDshExternalSpawnSpec({
+    candidate: windowsCandidate,
+    port: 43123,
+    dshHome: 'C:\\GBC Data\\dsh-home',
+    commandInterpreter: 'C:\\Windows\\System32\\cmd.exe',
+    inheritedEnv: { SystemRoot: 'C:\\Windows' }
+  })
+  expect(windows.file).toBe('C:\\Windows\\System32\\cmd.exe')
+  expect(windows.args.slice(0, 3)).toEqual(['/d', '/v:off', '/c'])
+  expect(windows.args[3]).toContain('dsh.cmd')
+  expect(windows.args[3]).toContain('"--port" "43123"')
+  expect(windows.args[3]).toContain('"--no-open"')
+  expect(windows.env.DSH_HOME).toBe('C:\\GBC Data\\dsh-home')
+  expect(windows.env.SSH_CONNECTION).toBe(DSH_EMBED_SSH_CONNECTION)
+
+  const rc8Windows = buildDshExternalSpawnSpec({
+    candidate: { ...windowsCandidate, version: '0.1.0-rc.8' },
+    port: 43123,
+    dshHome: 'C:\\GBC Data\\dsh-home',
+    commandInterpreter: 'C:\\Windows\\System32\\cmd.exe',
+    inheritedEnv: { SystemRoot: 'C:\\Windows' }
+  })
+  expect(rc8Windows.args[3]).toContain('"--no-open"')
+  const rc8WindowsRetry = buildDshExternalSpawnSpec({
+    candidate: { ...windowsCandidate, version: '0.1.0-rc.8' },
+    port: 43123,
+    dshHome: 'C:\\GBC Data\\dsh-home',
+    commandInterpreter: 'C:\\Windows\\System32\\cmd.exe',
+    inheritedEnv: { SystemRoot: 'C:\\Windows' },
+    noOpen: false
+  })
+  expect(rc8WindowsRetry.args[3]).not.toContain('--no-open')
+
+  const rc7Wsl = buildDshExternalSpawnSpec({
+    candidate: { ...wslCandidate, version: '0.1.0-rc.7' },
+    port: 43124,
+    dshHome: '/home/test/.dsh',
+    noOpen: false
+  })
+  expect(rc7Wsl.args).not.toContain('--no-open')
+  expect(rc7Wsl.args).toContain(`SSH_CONNECTION=${DSH_EMBED_SSH_CONNECTION}`)
+
+  const wsl = buildDshExternalSpawnSpec({
+    candidate: wslCandidate,
+    port: 43124,
+    dshHome: '/home/test/.local/share/gbc/dsh-home',
+    environmentPath: '/home/test/.local/bin:/usr/bin:/bin',
+    inheritedEnv: { SystemRoot: 'C:\\Windows' }
+  })
+  expect(wsl.file).toBe('wsl.exe')
+  expect(wsl.args).toEqual(expect.arrayContaining([
+    '--distribution',
+    'Ubuntu-24.04',
+    'PATH=/home/test/.local/bin:/usr/bin:/bin',
+    'DSH_HOME=/home/test/.local/share/gbc/dsh-home',
+    '/home/test/.local/bin/dsh',
+    '--port',
+    '43124',
+    '--no-open',
+    `SSH_CONNECTION=${DSH_EMBED_SSH_CONNECTION}`
+  ]))
+  expect(wsl.args.join(' ')).toContain(DSH_WSL_PID_MARKER)
+  expect(wsl.env.DSH_HOME).toBeUndefined()
+  expect(wsl.env.SSH_CONNECTION).toBeUndefined()
+})
+
+test('remote launch pins loopback, product overlay and the public authority', () => {
+  const remote = buildDshExternalSpawnSpec({
+    candidate: windowsCandidate,
+    port: 43125,
+    dshHome: 'C:\\Users\\Test User\\.dsh',
+    commandInterpreter: 'C:\\Windows\\System32\\cmd.exe',
+    inheritedEnv: { SystemRoot: 'C:\\Windows' },
+    remote: {
+      publicOrigin: 'https://dsh.example.test',
+      overlayPath: 'C:\\GBC Data\\dsh-runtime\\remote-web.patch.yml'
+    }
+  })
+  const command = remote.args.join(' ')
+  expect(command).toContain('"--profile" "web"')
+  expect(command).toContain('"--patch" "C:\\GBC Data\\dsh-runtime\\remote-web.patch.yml"')
+  expect(command).toContain('"--host" "127.0.0.1"')
+  expect(command).toContain('"--trusted-host" "dsh.example.test"')
+  expect(command).toContain('"--no-open"')
+  expect(command).not.toContain('0.0.0.0')
+
+  const retry = buildDshExternalSpawnSpec({
+    candidate: windowsCandidate,
+    port: 43125,
+    dshHome: 'C:\\Users\\Test User\\.dsh',
+    commandInterpreter: 'C:\\Windows\\System32\\cmd.exe',
+    inheritedEnv: { SystemRoot: 'C:\\Windows' },
+    noOpen: false,
+    remote: {
+      publicOrigin: 'https://dsh.example.test',
+      overlayPath: 'C:\\GBC Data\\dsh-runtime\\remote-web.patch.yml'
+    }
+  })
+  const retryCommand = retry.args.join(' ')
+  expect(retryCommand).not.toContain('--no-open')
+  expect(retryCommand).toContain('"--patch" "C:\\GBC Data\\dsh-runtime\\remote-web.patch.yml"')
+  expect(retryCommand).toContain('"--trusted-host" "dsh.example.test"')
+  expect(retry.env.SSH_CONNECTION).toBe(DSH_EMBED_SSH_CONNECTION)
+})
+
+test('Home hides DSH when the scan finds no installation', async () => {
+  const appState = await launchApp({ createDefaultTerminal: false })
+  try {
+    await expect(appState.window.getByTestId('home-page')).toBeVisible({
+      timeout: 20_000
+    })
+    await expect(appState.window.getByTestId('home-quick-dsh')).toHaveCount(0)
+    const report = await appState.window.evaluate(() =>
+      window.dshApi.scanRuntimes(false)
+    )
+    expect(report.candidates).toEqual([])
+  } finally {
+    await appState.app.close()
+  }
+})
+
+test('settings scans DSH runtimes and persists an explicit local choice', async () => {
+  const executable = e2eDshExecutable()
+  const first = await launchApp({
+    createDefaultTerminal: false,
+    localDsh: true
+  })
+  try {
+    await first.window.evaluate(() => {
+      window.__gbcDebugShell?.navigate('settings')
+    })
+    await openSettings(first.window, 'session')
+    const select = first.window.getByTestId('dsh-runtime-select')
+    await expect(select).toBeEnabled({ timeout: 20_000 })
+    await expect(select).toHaveAttribute('data-value', 'auto')
+    await expect(first.window.getByTestId('dsh-host-restart')).toBeEnabled()
+    await select.click()
+    const localOption = first.window.locator(
+      '[data-testid^="dsh-runtime-select-option-"]:not([data-testid="dsh-runtime-select-option-auto"])'
+    ).first()
+    await expect(localOption).toBeVisible()
+    await localOption.click()
+    await expect.poll(
+      () => first.window.evaluate(async () =>
+        (await window.dshApi.getConfig()).runtimePreference
+      )
+    ).toMatchObject({ kind: 'installation' })
+  } finally {
+    await first.app.close()
+  }
+
+  const second = await launchApp({
+    createDefaultTerminal: false,
+    userDataDir: first.userDataDir,
+    localDsh: true
+  })
+  try {
+    const config = await second.window.evaluate(() => window.dshApi.getConfig())
+    expect(config.runtimePreference).toMatchObject({ kind: 'installation' })
+    const report = await second.window.evaluate(() =>
+      window.dshApi.scanRuntimes(false)
+    )
+    expect(report.candidates).toEqual([
+      expect.objectContaining({
+        kind: 'installation',
+        resolvedExecutable: executable
+      })
+    ])
+  } finally {
+    await second.app.close()
+  }
+})
+
+test('Home exposes a discovered local DSH runtime', async () => {
+  const executable = e2eDshExecutable()
+  const expectedRuntime = process.platform === 'win32'
+    ? 'Windows'
+    : process.platform === 'darwin'
+      ? 'macOS'
+      : 'Linux'
+  const appState = await launchApp({
+    createDefaultTerminal: false,
+    env: { GBC_E2E_DSH_INSTALLATION: executable }
+  })
+  try {
+    const report = await appState.window.evaluate(() =>
+      window.dshApi.scanRuntimes(false)
+    )
+    expect(report.candidates).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        kind: 'installation',
+        resolvedExecutable: executable
+      })
+    ]))
+    await expect(appState.window.getByTestId('home-quick-dsh')).toContainText(
+      expectedRuntime
+    )
+  } finally {
+    await appState.app.close()
+  }
+})
+
+test('auto starts a discovered Windows DSH installation through its real shim', async () => {
+  test.skip(process.platform !== 'win32', 'Windows npm shim coverage')
+  test.setTimeout(180_000)
+  const executable = e2eDshExecutable()
+  expect(existsSync(executable)).toBe(true)
+  const appState = await launchApp({
+    createDefaultTerminal: false,
+    localDsh: true
+  })
+  try {
+    await expect.poll(
+      () => appState.window.evaluate(async () =>
+        (await window.dshApi.ensureStarted()).state
+      ),
+      { timeout: 90_000, intervals: [500, 1000, 2000] }
+    ).toBe('ready')
+    const status = await appState.window.evaluate(() => window.dshApi.getStatus())
+    expect(status.activeRuntime).toMatchObject({
+      kind: 'installation',
+      resolvedExecutable: executable,
+      runtime: { kind: 'host', platform: 'windows' }
+    })
+    await expect(
+      appState.window.evaluate(() => window.dshApi.getBootManifest())
+    ).resolves.toBeTruthy()
+    const before = await appState.window.evaluate(() => window.dshApi.getStatus())
+    const restarted = await appState.window.evaluate(() => window.dshApi.restart())
+    expect(restarted.state).toBe('ready')
+    expect(restarted.baseUrl).toBeTruthy()
+    expect(restarted.baseUrl).not.toBe(before.baseUrl)
+  } finally {
+    await appState.app.close()
+  }
+})
+
+test('host retries without --no-open when the selected DSH rejects it', async () => {
+  test.skip(process.platform !== 'win32', 'Windows command shim is required')
+  test.setTimeout(60_000)
+  const executable = resolve(
+    __dirname,
+    'fixtures/dsh-no-open-retry.cmd'
+  )
+  const appState = await launchApp({
+    createDefaultTerminal: false,
+    env: { GBC_E2E_DSH_INSTALLATION: executable }
+  })
+  try {
+    await expect(appState.window.getByTestId('home-quick-dsh')).toBeVisible({
+      timeout: 20_000
+    })
+    const status = await appState.window.evaluate(() =>
+      window.dshApi.ensureStarted()
+    )
+    expect(status).toMatchObject({
+      state: 'ready',
+      activeRuntime: {
+        kind: 'installation',
+        resolvedExecutable: executable,
+        runtime: { kind: 'host', platform: 'windows' }
+      }
+    })
+  } finally {
+    await appState.app.close()
+  }
+})
+
+test('a real installed Windows DSH captures the official Electron surface', async () => {
+  const executable = process.env['GBC_E2E_REAL_DSH']
+  test.skip(
+    process.platform !== 'win32' || !executable,
+    'Set GBC_E2E_REAL_DSH to the installed Windows dsh.cmd'
+  )
+  test.setTimeout(180_000)
+  expect(existsSync(executable!)).toBe(true)
+  const appState = await launchApp({
+    createDefaultTerminal: false,
+    env: { GBC_E2E_DSH_INSTALLATION: executable! }
+  })
+  try {
+    await expect(appState.window.getByTestId('home-quick-dsh')).toBeVisible({
+      timeout: 20_000
+    })
+    await appState.window.getByTestId('home-quick-dsh').click()
+    await expect(appState.window.getByTestId('dsh-page')).toHaveAttribute(
+      'data-dsh-surface-phase',
+      'ready',
+      { timeout: 120_000 }
+    )
+    const status = await appState.window.evaluate(() => window.dshApi.getStatus())
+    expect(status).toMatchObject({
+      state: 'ready',
+      activeRuntime: {
+        kind: 'installation',
+        resolvedExecutable: executable,
+        runtime: { kind: 'host', platform: 'windows' }
+      }
+    })
+  } finally {
+    await appState.app.close()
+  }
+})
+
+test('installed DSH session creation, selection and titles reach the desktop sidebar', async () => {
+  const executable = process.env['GBC_E2E_REAL_DSH']
+  test.skip(!executable, 'Set GBC_E2E_REAL_DSH to an installed DSH 0.1.5+ executable')
+  test.setTimeout(180_000)
+  const { app, window, userDataDir } = await launchApp({
+    createDefaultTerminal: false,
+    env: { GBC_E2E_DSH_INSTALLATION: executable! }
+  })
+  try {
+    await window.getByTestId('home-quick-dsh').click()
+    await expect(window.getByTestId('dsh-page')).toHaveAttribute(
+      'data-dsh-surface-phase', 'ready', { timeout: 120_000 }
+    )
+    const status = await window.evaluate(() => window.dshApi.getStatus())
+    const official = async <T>(script: string): Promise<T> => app.evaluate(
+      async ({ webContents }, { baseUrl, script }) => {
+        const page = webContents.getAllWebContents().find((item) =>
+          item.getURL().startsWith(baseUrl!)
+        )
+        if (!page) throw new Error('official DSH page is missing')
+        return page.executeJavaScript(script, true)
+      }, { baseUrl: status.baseUrl, script }
+    )
+    const slotId = await window.getByTestId('dsh-page').getAttribute('data-dsh-slot')
+    const active = () => window.evaluate(async () =>
+      (await window.agentApi.listActive()).filter((item) => item.adapterId === 'dsh')
+    )
+    // Use the installed official service and its real host, in an isolated home.
+    const create = () => official<string>(`(async () => {
+      const sessions = globalThis.__GBC_DSH_EMBED__.ctx.get('sessions');
+      const id = await sessions.create({ cwd: ${JSON.stringify(userDataDir)} });
+      sessions.open(id);
+      return id;
+    })()`)
+    const first = await create()
+    await expect.poll(active, { timeout: 10_000 }).toContainEqual(
+      expect.objectContaining({ sessionId: slotId, adapterSessionId: first })
+    )
+    await expect(window.locator(`[data-testid="sidebar-session-item"][data-session-id="${slotId}"]`)).toBeVisible()
+
+    const second = await create()
+    await expect.poll(active).toContainEqual(
+      expect.objectContaining({ sessionId: slotId, adapterSessionId: second })
+    )
+    await official(`globalThis.__GBC_DSH_EMBED__.ctx.get('sessions').open(${JSON.stringify(first)})`)
+    await expect.poll(active).toContainEqual(
+      expect.objectContaining({ sessionId: slotId, adapterSessionId: first })
+    )
+    await expect(window.getByTestId('dsh-page')).toHaveAttribute('data-dsh-session', first)
+
+    await official(`(async () => {
+      const result = await globalThis.__GBC_DSH_EMBED__.ctx.get('remote').session.rename({
+        sessionId: ${JSON.stringify(first)}, title: 'DSH sidebar regression'
+      });
+      if (!result.ok) throw new Error(result.error.message);
+    })()`)
+    await expect(window.locator(`[data-testid="sidebar-session-item"][data-session-id="${slotId}"]`)).toContainText('DSH sidebar regression')
+
+    await window.evaluate(() => {
+      (window as unknown as { __gbcDebugShell: { navigate(page: string): void } })
+        .__gbcDebugShell.navigate('home')
+    })
+    await window.getByTestId('home-quick-dsh').click()
+    await expect(window.getByTestId('dsh-page')).not.toHaveAttribute('data-dsh-slot', slotId!)
+    await expect(window.getByTestId('dsh-page')).toHaveAttribute('data-dsh-surface-phase', 'ready')
+    const secondSlot = await window.getByTestId('dsh-page').getAttribute('data-dsh-slot')
+    const third = await create()
+    await expect.poll(active).toEqual(expect.arrayContaining([
+      expect.objectContaining({ sessionId: slotId, adapterSessionId: first }),
+      expect.objectContaining({ sessionId: secondSlot, adapterSessionId: third })
+    ]))
+    await window.locator(`[data-testid="sidebar-session-item"][data-session-id="${slotId}"]`).click()
+    await expect.poll(() => official<string>(
+      'globalThis.__GBC_DSH_EMBED__.ctx.get("sessions").list.getSnapshot().current'
+    )).toBe(first)
+    await expect(window.getByTestId('dsh-page')).toHaveAttribute('data-dsh-surface-phase', 'ready')
+    await window.screenshot({ path: '.dev-shots/dsh-session-sync-fixed.png' })
+  } finally {
+    await app.close()
+  }
+})
+
+test('titlebar restart kills the DSH process and reloads the official surface', async () => {
+  test.setTimeout(180_000)
+  const executable = e2eDshExecutable()
+  test.skip(!existsSync(executable), 'local dsh-runtime fixture is required')
+  const appState = await launchApp({
+    createDefaultTerminal: false,
+    localDsh: true
+  })
+  try {
+    await expect(appState.window.getByTestId('home-quick-dsh')).toBeVisible({
+      timeout: 20_000
+    })
+    await appState.window.getByTestId('home-quick-dsh').click()
+    await expect(appState.window.getByTestId('dsh-page')).toHaveAttribute(
+      'data-dsh-surface-phase',
+      'ready',
+      { timeout: 120_000 }
+    )
+    const before = await appState.window.evaluate(() => window.dshApi.getStatus())
+    await expect(appState.window.getByTestId('titlebar-dsh-restart')).toBeEnabled()
+    await appState.window.getByTestId('titlebar-dsh-restart').click()
+    await expect(appState.window.getByTestId('dsh-page')).toHaveAttribute(
+      'data-dsh-surface-phase',
+      'ready',
+      { timeout: 120_000 }
+    )
+    const after = await appState.window.evaluate(() => window.dshApi.getStatus())
+    expect(after.state).toBe('ready')
+    expect(after.baseUrl).toBeTruthy()
+    expect(after.baseUrl).not.toBe(before.baseUrl)
+  } finally {
+    await appState.app.close()
+  }
+})
+
+test('auto fails when a cached local install is stale and nothing else is found', async () => {
+  test.setTimeout(60_000)
+  const missingExecutable = resolve(
+    __dirname,
+    'fixtures/does-not-exist/dsh.exe'
+  )
+  const appState = await launchApp({
+    createDefaultTerminal: false,
+    env: { GBC_E2E_DSH_INSTALLATION: missingExecutable }
+  })
+  try {
+    await expect.poll(
+      () => appState.window.evaluate(async () =>
+        (await window.dshApi.ensureStarted()).state
+      ),
+      { timeout: 45_000, intervals: [500, 1000, 2000] }
+    ).toBe('failed')
+    const status = await appState.window.evaluate(() => window.dshApi.getStatus())
+    expect(status.error).toBeTruthy()
+  } finally {
+    await appState.app.close()
+  }
+})
+
+test('a real WSL launch receives Linux PATH/HOME and is reaped on stop', async () => {
+  const distro = process.env['GBC_E2E_REAL_DSH_WSL']
+  test.skip(
+    process.platform !== 'win32' || !distro,
+    'Set GBC_E2E_REAL_DSH_WSL to an installed distro for the real gate'
+  )
+  test.setTimeout(120_000)
+  const windowsFixture = resolve(
+    __dirname,
+    'fixtures/dsh-runtime-host.sh'
+  )
+  const executable = execFileSync(
+    'wsl.exe',
+    ['--distribution', distro!, '--exec', 'wslpath', '-a', '-u', windowsFixture],
+    { encoding: 'utf8' }
+  ).trim()
+  const home = execFileSync(
+    'wsl.exe',
+    ['--distribution', distro!, '--exec', 'sh', '-lc', 'printf %s "$HOME"'],
+    { encoding: 'utf8' }
+  ).trim()
+  execFileSync(
+    'wsl.exe',
+    ['--distribution', distro!, '--exec', 'test', '-x', executable]
+  )
+  const appState = await launchApp({
+    createDefaultTerminal: false,
+    env: {
+      GBC_E2E_DSH_INSTALLATION: executable,
+      GBC_E2E_DSH_WSL_DISTRO: distro!,
+      GBC_E2E_DSH_WSL_HOME: home,
+      GBC_E2E_DSH_WSL_PATH:
+        '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
+    }
+  })
+  let linuxPid = 0
+  try {
+    await expect.poll(
+      () => appState.window.evaluate(async () =>
+        (await window.dshApi.ensureStarted()).state
+      ),
+      { timeout: 60_000, intervals: [500, 1000, 2000] }
+    ).toBe('ready')
+    const status = await appState.window.evaluate(() => window.dshApi.getStatus())
+    expect(status.activeRuntime).toMatchObject({
+      kind: 'installation',
+      resolvedExecutable: executable,
+      runtime: { kind: 'wsl', distro }
+    })
+    const response = await appState.window.evaluate(() =>
+      window.dshWireApi.fetch({
+        requestId: 'wsl-fixture',
+        method: 'POST',
+        path: '/api/fixture.describe'
+      })
+    )
+    const envelope = JSON.parse(response.body) as {
+      result: {
+        value: { dshHome: string; telemetryDisabled: string; pid: number }
+      }
+    }
+    expect(envelope.result.value).toMatchObject({
+      dshHome: `${home}/.local/share/gbc/dsh-home`,
+      telemetryDisabled: '1'
+    })
+    linuxPid = envelope.result.value.pid
+    expect(linuxPid).toBeGreaterThan(1)
+  } finally {
+    await appState.app.close()
+  }
+  await expect.poll(() => {
+    try {
+      execFileSync('wsl.exe', [
+        '--distribution', distro!, '--exec', 'kill', '-0', String(linuxPid)
+      ], { stdio: 'ignore' })
+      return 'alive'
+    } catch {
+      return 'stopped'
+    }
+  }, { timeout: 10_000 }).toBe('stopped')
+})

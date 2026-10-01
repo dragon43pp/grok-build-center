@@ -1,0 +1,35 @@
+node_modules
+dist
+out
+release
+/release-*/
+/artifacts/
+*.log
+.DS_Store
+.vscode/*
+!.vscode/extensions.json
+logs/
+test-results/
+*.tsbuildinfo
+src/assets/fonts/.subset/
+*.err
+.claude/
+.dev-shots/
+# verify_readonly.py / session_probe.ts 中间产物，每次运行重新生成
+/tools/_*.mjs
+# Vite 打包配置时会在配置旁边写 `electron.vite.config.<毫秒>.mjs`，正常用完即删；
+# 构建被 kill 就会漏在根目录（2026-09-30 实测一次漏了 6 个），
+# 而打包的 `files: ["**/*"]` 会把它们扫进 asar。
+electron.vite.config.*.mjs
+# 上游把 docs/ 整个排除，只留一份 SPEC。这里多留两样自己的东西：
+#   brand.md  改任何视觉之前必须读的规范
+#   shots/    构建/隔离验证的截图证据
+docs/*
+!docs/SPEC-REMOTE-DSH-WEB-TUNNEL.md
+!docs/brand.md
+!docs/DESIGN-SPEC.md
+!docs/shots
+!docs/shots/**
+
+# 内置 dsh 运行时的隔离依赖树（dsh-runtime/package*.json 需提交）
+dsh-runtime/node_modules/

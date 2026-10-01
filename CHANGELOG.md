@@ -1,0 +1,270 @@
+# Changelog
+
+本文件记录 HRack 各公开版本的重要变化。版本号遵循 [Semantic Versioning](https://semver.org/)。
+
+## [Unreleased]
+
+## [0.4.7] - 2026-09-18
+
+### Fixed
+
+- Fixed newly created DSH sessions not appearing in the desktop sidebar and session changes inside DSH not updating the active sidebar entry after upgrading to DSH 0.1.5.
+- Restored live DSH session title and running-state updates. Reconnecting now catches up on missed changes without overwriting newer updates, while keeping compatibility with older DSH versions.
+
+### Changed
+
+- Added an explicit "Choose image / GIF" option and a GIF-only file filter for terminal backgrounds, with clearer instructions in all five supported languages. Animated GIFs up to 16 MB play in both the preview and terminal, support the existing fit and opacity controls, and remain selected after restart.
+
+## [0.4.6] - 2026-09-10
+
+### Fixed
+
+- Adapted to DeepSeek Harness 0.1.2+ browser authentication and Typert RPC: HRack now reads the process launch token, exchanges it for the signed session cookie, and uses that cookie for host ready checks, the official embedded page, wire/projector traffic, and the remote tunnel. Ready checks accept both the older `session.list` / `workspace.list` control plane and the 0.1.5 `session/list` remote. Older DSH hosts that do not print a token keep working without a cookie.
+- The embedded official DSH page now recognizes 0.1.5 layout markers, and a missing default sidebar collapse no longer fails the whole surface.
+- Hardened the DSH web tunnel against unauthenticated denial of service: malformed WebSocket upgrade requests no longer permanently consume the tunnel capacity quota, and relay-side stream-id accounting no longer grows without bound over a relay's lifetime.
+- Fixed relay room capacity exhaustion in deployments without a reconciler: repeatedly creating and revoking rooms no longer leaves permanently revoked tombstones that block all future room creation.
+- Fixed a desktop remote-control deadlock where disconnecting during session creation left the desktop stuck in a phantom "driven" state — local terminals resized to phone dimensions, local resizes blocked, and PTY output stalled until a 1 MB overflow.
+- Fixed swallowed PTY exit events: closing a remotely driven terminal tab or stopping an agent session now reliably delivers the exit fact, releasing the phone's drive instead of freezing the terminal and rejecting later drives as busy.
+- Page-level failures in the embedded DSH surface (load timeouts, stale session ids) no longer restart the shared DSH host and interrupt all other DSH sessions.
+- Hardened the tunnel's local path fence: percent-encoded backslashes (for example `..%5c..%5c`) are now rejected; workspace browsing refuses UNC and device paths (`\\server\share`, `\\.\`), and remote launches refuse relative workspace paths instead of silently resolving them against the desktop's working directory.
+- Fixed DSH host shutdown races: stopping or disposing the host can no longer race an in-flight startup into spawning a new DSH process after teardown, and the `--no-open` retry detection no longer considers output from earlier launch targets.
+- Restarting DSH during startup now waits for the cancelled launch to finish before starting a fresh host.
+- Clearing diagnostics waits for in-flight log writes, preventing cleared entries from reappearing after restart.
+- Valid terminal history responses near the 1 MiB frame limit are delivered, and a drive is released if its response cannot be sent.
+- Fixed an unhandled-exception crash path in the remote DSH preflight when a response stream resets mid-transfer.
+- Fixed tunnel WebSocket streams reporting post-open local errors as open-rejections, which the gateway treated as a protocol violation and tore down the entire tunnel.
+- Directories with more than 5,000 entries are now truncated for pagination instead of failing the entire listing.
+- Naturally exited agent sessions are now retained with a bounded cap (latest 100) instead of accumulating for the lifetime of the main process.
+- ConPTY resize handling now gives up an expectation after repeated size-mismatched redraws instead of suppressing subsequent redraws indefinitely.
+- The phone app validates launch arguments against protocol limits before submitting; oversized submissions no longer cause the relay to disconnect the phone for repeated violations.
+- Negative exit codes (for example `-1` on Windows) are now displayed instead of dropped.
+- Fixed the remote demo page hanging when replaying cursor-sync history events.
+
+### Changed
+
+- Diagnostic log persistence is now serialized and asynchronous instead of synchronously writing to disk on the main thread for every console message; the Settings log panel also subscribes only while its tab is open, so other settings pages no longer re-render on every log line.
+- The DSH session projector merges event-stream reconnects by generation and closes replaced sockets, so a dropped connection no longer multiplies duplicate connections and duplicated events.
+- Outbound remote-control messages exceeding the 1 MiB protocol frame limit are dropped and logged instead of causing the relay to terminate the desktop connection.
+- The remote-driven terminal overlay no longer blocks local scrolling or interaction; only its notification pill is interactive.
+- The pairing QR code is memoized on its URL instead of being rebuilt on every pairing poll.
+
+## [0.4.5] - 2026-08-28
+
+### Added
+
+- Added eight built-in UI themes with four light styles (Paper Ink, Glacier Glass, Sakura Clay, and Circuit Lime) and four dark styles (Obsidian Ember, Midnight Cobalt, Forest Signal, and Violet Arcade).
+
+### Changed
+
+- Refreshed the desktop, taskbar, tray, and installer branding with the updated HRack mark.
+- Standardized adapter preparation commands on a 10-second budget so WSL cold starts and Windows-mounted filesystem access are handled consistently across Grok Build, Kimi Code, Codex, Pi, Claude Code, and OpenCode.
+
+### Fixed
+
+- Fixed Grok Build and Kimi Code WSL observer setup failures caused by launching user login shells to resolve hook configuration paths. Hook locations now use the same non-login environment as the actual CLI process and report specific environment failures.
+- Hardened shared WSL discovery so a slow or broken login profile no longer hides an otherwise healthy distro or CLI installation; login-shell PATH remains an optional enhancement with a safe runtime fallback.
+- Fixed intermittent remote terminal alignment after scrolling or viewport changes by synchronizing cursor and viewport state with remote renderers.
+
+## [0.4.4] - 2026-08-28
+
+### Added
+
+- Added a selectable diagnostics panel in Settings that collects desktop, remote-control, and DSH events for easier troubleshooting without forcing an all-at-once copy action.
+- Added regional relay discovery for pairing URLs, allowing the desktop client to connect automatically to the relay selected when the URL was created.
+
+### Fixed
+
+- Fixed DSH startup failures caused by injecting the remote directory picker more than once into the same official DSH boot configuration.
+- Hardened remote and DSH connection diagnostics so regional routing and tunnel failures retain useful local context without exposing pairing credentials.
+
+## [0.4.3] - 2026-08-27
+
+### Fixed
+
+- Fixed intermittent terminal corruption and misalignment after long, scrollable TUI output or window-size changes. HRack now suppresses only ConPTY redraw frames that carry the expected size marker, while preserving application-owned redraws from Cline, Claude Code, Kimi Code, and other terminal UIs.
+- Restored copy actions in the embedded DSH interface by allowing sanitized clipboard writes only from the same-origin local DSH surface; all unrelated permissions remain denied.
+
+### Changed
+
+- The embedded DSH interface now keeps its native theme instead of being recolored with HRack theme tokens.
+- Updated the public HRack website with device-aware visual effects that cap render cadence, pause off-screen work, reduce load on constrained devices, and respect reduced-motion preferences.
+
+## [0.4.2] - 2026-08-26
+
+### 新增
+
+- 远程设置页新增连接状态面板，实时显示连接指示灯、往返延迟以及本次连接的上传/下载流量。
+
+### 改进
+
+- 配对 URL 持久化保存，HRack 重启后会自动重新连接；远程设置页改为直接链接 `hrack.dev` 创建配对 URL，并移除只能由网页完成的房间吊销入口。
+- DSH 网页隧道默认启用，不再要求用户额外打开开关；远控状态和错误提示改为面向用户的明确文案。
+- 官方远控服务迁移到 `hrack.dev`，DSH 网页隧道迁移到 `dsh.hrack.dev`。
+- 重制桌面窗口、任务栏、托盘和安装包图标，使用正确的 HRack 品牌字形与圆角底板；CLI 图标固定使用各提供方的官方品牌颜色，不再跟随主题染色。
+
+### 修复
+
+- 发布产物的 `latest*.yml` 直接携带 CHANGELOG 原始 Markdown，避免 GitHub Atom 将更新说明转换为 HTML 后被安全渲染器跳过。
+
+## [0.4.1] - 2026-08-25
+
+### 修复
+
+- 适配 DeepSeek Harness 0.1.1 的 boot manifest 注入方式：远程能力检查改为解析 `window.__DSH_BOOT__` 和 `globalThis["__DSH_BOOT__"]` 的等价写法，再校验 manifest 内容，不再将 0.1.1 误判为“远程隧道不可用”。
+- 调整 DSH 远程状态文案，不再把主机、网页表面或隧道的能力失败笼统归因于 DSH 版本。
+
+## [0.4.0] - 2026-08-25
+
+### 新增
+
+- 新增完整的 HRack Remote：桌面端可生成配对 URL / 二维码，经正式 TLS 公网中继把实时会话状态同步到手机，并支持临时接管终端输入。
+- 新增 HRack 手机端配套应用：支持扫码或粘贴 URL 配对、会话列表、横屏全屏监听、状态提示音，以及从监听卡片聚焦桌面端对应会话。
+- 手机端可新建 Claude Code、Codex、OpenCode 等 CLI 会话，并通过桌面端文件选择协议浏览 Windows / WSL 工作区；免审批启动、运行位置和启动参数与桌面端语义一致。
+- 远程终端支持 ANSI/TUI 实时渲染、控制键、方向键、斜杠指令、持久化缩放比例，以及手机软键盘和横竖屏切换。
+- 新增 DSH 官方 Web 界面的安全隧道：手机端可查看活跃 DSH 会话、创建会话、发送消息并与桌面端的会话监听及聚焦状态双向同步。
+- 更新确认弹窗的「更新说明」改为 Markdown 渲染：支持标题、列表、加粗、代码块、表格等 GFM 语法；HTML 仍一律跳过，链接只展示不导航。
+
+### 改进
+
+- 远控协议补齐版本协商、消息方向白名单、序号与快照恢复、背压和尺寸上限；断线重连不再把历史 PTY 输出当作新流量重复播放。
+- 手机终端采用与桌面端一致的网格与字符宽度语义，键盘弹出时整体平移终端而不改变 PTY 行列数，减少 TUI 重排和右侧空白。
+- 横屏监听状态与桌面悬浮窗对齐，显示 CLI 图标、名称、完成 / 等待确认 / 执行中 / 异常等状态，并复用 HRack 默认提示音。
+- 公网房间、设备控制权和 DSH 隧道均绑定已认证账户；加入连接撤销、凭据轮换、重连和过期清理边界。
+
+### 修复
+
+- 修复手机终端退出输入后无法再次聚焦、滚动时产生 `NaN` 输入、重连重复回放、字符错位和品牌字形裁切等问题。
+- 修复 Android 后台切换导致 DSH 会话丢失，以及隧道重连后沿用失效凭据的问题。
+- 适配新版 DSH 的 `--no-open` 差异和官方运行时桥接方式；启动失败时自动按兼容参数重试并展示可复制的错误信息。
+
+### 发布说明
+
+- 桌面安装包继续提供 Windows x64、macOS Apple Silicon 和 Linux x64；Windows 与 macOS 制品尚未进行商业代码签名，系统首次启动时可能显示安全提醒。
+- 远程控制需配合已部署的 HRack Remote 服务和手机端应用使用；桌面端不会在手机未主动接管时转发键盘输入。
+
+## [0.3.6] - 2026-08-21
+
+### 新增
+
+- 支持重启 DSH 进程：打开 DSH 时标题栏提供「重启 DSH」，设置 → 会话里也有同一入口。安装插件后会杀掉当前 host 再拉起，并重载官方页面；HRack 的跟踪位不会被清掉。
+
+### 修复
+
+- 适配 DeepSeek Harness 0.1.0-rc.7+：`dsh web` 默认会打开系统浏览器，HRack 嵌入时传入 `--no-open`。WSL 上同版本 web 应用可能不认该参数，被拒绝后自动去掉再启动。
+- 适配 rc.7+ 官方页面模块加载：Cordis 改为从 `window.__ModuleLoader__` 捕获，不再依赖已移除的 `__DSH_MODULES__`，避免嵌入失败后又弹出浏览器。
+
+## [0.3.5] - 2026-08-20
+
+### 新增
+
+- 终端可设置背景图像：从本地选择图片，支持覆盖 / 适应 / 拉伸 / 平铺，默认不透明度 30%，设置页带小预览；背景铺满圆角留白，并隐藏多余滚动条。
+- 新增可设置事件提示音：阻塞 / 需要操作、完成、异常时播放，默认内置 `resources/done.mp3`；设置页支持上传本地音频与试听。
+- 发现新版本时弹出更新确认框并展示该版本的更新说明（超长说明可滚动），可选择“立即更新 / 忽略此版本 / 以后不再弹出 / 稍后”；忽略的版本不再重复提示，“以后不再弹出”会永久关闭自动弹窗。
+
+### 修复
+
+- 修复悬浮窗在事件更新时因高 DPI 缩放导致窗口逐次下移的问题：改为以稳定底边为锚点，并在系统量化窗口尺寸后纠正位置。
+
+### 改进
+
+- 启动后立即自动检查更新，不再依赖打开设置页；发现新版本时标题栏直接显示版本入口，点击直达更新设置。
+- 加强悬浮窗置顶：使用更高置顶层级，并定时重新置顶，减少被其它应用覆盖的可能。
+- 悬停方框特效可在设置和首次欢迎页关闭；关掉后不再跟随指针绘制方框。
+- 设置页按外观 / 布局 / 终端 / 会话 / 更新分页，左侧分类导航，内容区加宽；去掉叠在真实标题上的装饰性英文眉题。
+
+## [0.3.4] - 2026-08-19
+
+### 新增
+
+- 新建 CLI 会话时记住上次工作区，并用主题化下拉框提供最近 5 条工作区记录。
+- 新增 OpenCode Bridge：其它本地 harness 可以创建、发送、监听、审批、回答并关闭 HRack 里已经打开的 OpenCode 标签；设置页可复制用法 Skill。
+- 新增 Grok Build 会话监听，覆盖本机与 WSL。
+- 支持免审批启动的 CLI 在新建会话时提供勾选，并记住上次选择。
+
+### 修复
+
+- 普通终端未指定工作区时改在用户主目录启动，不再落到安装目录（例如 `AppData\\Local\\Programs\\HRack`）。
+- 代码阅读器刷新时不再闪屏，文件树也不会滚回顶部。
+- WSL 中启动 CLI 时外层工作目录不再误用 POSIX 路径，避免 Windows `Error 267`。
+- DSH 监听器现在跟踪 tool call；本轮结束后显示「本轮任务已完成」，不再直接落到「等待你的下一条指令」。
+- 打包版 Windows 任务栏与开始菜单快捷方式在深色主题下改用浅色图标；安装包图标改为含 256px 的浅色 ICO，满足 electron-builder 打包门槛。
+- OpenCode Bridge 管道被占用时不再挡住主窗口启动。
+
+### 改进
+
+- 不再随包内置 DeepSeek Harness 兜底运行时。DSH 与其它 CLI 一样先扫描本机 / WSL，没有安装就不展示入口。
+- Windows / macOS / Linux 安装包去掉约 250MB 的 `dsh-runtime`，并裁掉未使用的 Electron 语言包，安装包更小、安装更快。
+
+## [0.3.3] - 2026-08-18
+
+### 修复
+
+- 修复打包版内置 DSH 启动失败（HMR 报 `--expose-internals is required`）：内置 host 改以 `ELECTRON_RUN_AS_NODE` 纯 Node 模式启动，`--expose-internals` 在打包产物中同样生效，开发与打包行为一致。
+
+### 改进
+
+- DSH 运行时发现不再锁定唯一兼容版本：扫描如实上报本机 / WSL 安装的实际版本，任意版本均可作为候选并被 auto 优先选中（随包内置版本仅作兜底）；实际兼容性由启动时的控制面能力门禁（`session.list` / `workspace.list`）兜底。
+
+## [0.3.2] - 2026-08-18
+
+### 新增
+
+- 设置页新增「主题 JSON」编辑器，可编辑并保存个人界面主题（固定 `custom.json`），保存后可在主题选择器中选用。
+- 新增主题创作 Skill（`create-hrack-theme`）及零依赖校验脚本（`validate-theme.cjs`），附带 WCAG 对比度检查。
+- 新增 CLI 会话录制脚本（`npm run record:cli-demo`）。
+
+### 改进
+
+- DSH 默认共享 `~/.dsh` 历史目录，与本机 DeepSeek Harness 复用会话历史。
+- DSH 界面圆角改用原生视图圆角（`setBorderRadius`），与侧栏环境色对齐；切换圆角开关不再重开会话。
+- 应用深色模式下，窗口与托盘图标自动切换为浅色变体。
+- 用户数据目录统一为 HRack / HRack Dev，安装包 appId 更新为 `com.hrack.app`。
+
+### 修复
+
+- 修复 DSH 圆角原先依赖内容留白、关闭后圆角消失的问题，改为原生圆角实现。
+
+## [0.3.0] - 2026-08-16
+
+### 新增
+
+- 产品由 Vibing 更名为 HRack（Harness Rack），更新应用界面、图标、安装包与项目文档。
+- 嵌入 DeepSeek Harness 官方 Web 界面，优先使用兼容的本机或 WSL DSH，随包版本仅作为兜底。
+- 新增 Kimi Code 会话监听，并统一 Claude Code、Codex、OpenCode、Pi 与 Kimi 的状态覆盖语义。
+- 新会话快速启动面板加入 DeepSeek Harness，并补齐已注册 CLI 的品牌图标。
+- 新增 Linux x64 AppImage 与 Debian 安装包，以及 Windows、macOS、Linux 并行构建的 GitHub Release 流程。
+
+### 改进
+
+- DSH 侧边栏只关注当前激活会话，支持多个独立 DSH 窗口并避免重复悬浮会话。
+- 修复审批完成后仍停留在“需要你的确认”、Kimi thinking 未同步、嵌入页面错位与品牌字体裁切等问题。
+- DSH 运行时扫描覆盖 Windows 主机与 WSL，并明确采用“本机优先、随包兜底”的选择策略。
+
+### 发布说明
+
+- Windows x64 提供引导式 NSIS 安装包；macOS 提供 Apple Silicon DMG；Linux x64 提供 AppImage 与 Debian 包。
+- Windows 与 macOS 产物尚未进行商业代码签名，系统首次启动时可能显示安全提醒。
+
+## [0.2.2] - 2026-08-07
+
+首个公开的 Windows 预览版本。
+
+### 新增
+
+- 面向 AI Coding CLI 的多会话终端、侧边栏状态聚合与悬浮提醒窗口。
+- Claude Code、Codex CLI、OpenCode 与 Pi 的原生事件监听适配器。
+- Windows 与 WSL 中的 CLI 扫描、启动、工作区选择和子终端。
+- 只读文件树、代码高亮、Markdown 渲染与文件变化自动刷新。
+- 深色与浅色 GUI/终端主题，以及可调节的阅读器布局。
+- 会话重命名、克隆、排序和注意力优先选项。
+
+### 修复
+
+- 保留 WSL 中通过 NVM、Volta、asdf、mise 等工具配置的运行时环境，避免 Adapter 探测或监听失效。
+- Pi 隐藏真实终端光标时，中文输入法预输入框会跟随 Pi 当前绘制的输入光标。
+- 改善 TUI 重绘、窗口缩放、鼠标输入、托盘图标与安装包图标的稳定性。
+
+### 发布说明
+
+- 当前仅提供 Windows x64 引导式安装包。
+- 安装包尚未进行商业代码签名，Windows 可能显示安全提醒。

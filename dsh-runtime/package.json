@@ -1,0 +1,9 @@
+{
+  "name": "hrack-dsh-runtime",
+  "private": true,
+  "description": "e2e/dev 夹具用的 deepseek-harness 隔离依赖树（不随发行版打包）。",
+  "dependencies": {
+    "@deepseek-ai/dsh": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-client-web": "0.1.0-rc.6"
+  }
+}

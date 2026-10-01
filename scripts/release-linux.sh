@@ -1,0 +1,163 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+workspace="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+package_path="$workspace/package.json"
+version="$(node -p "require('$package_path').version")"
+arch="${HRACK_LINUX_ARCH:-x64}"
+artifact_dir="$workspace/artifacts"
+release_root="${TMPDIR:-/tmp}"
+release_root="${release_root%/}"
+release_dir="$(mktemp -d "$release_root/hrack-release-linux.XXXXXX")"
+
+cleanup() {
+  if [[ -d "$release_dir" && "$release_dir" == "$release_root"/hrack-release-linux.* ]]; then
+    rm -rf -- "$release_dir"
+  fi
+}
+trap cleanup EXIT
+
+if [[ "$(uname -s)" != Linux ]]; then
+  echo 'Linux packaging must run on Linux.' >&2
+  exit 1
+fi
+
+case "$arch" in
+  x64)
+    deb_arch=amd64
+    binary_arch_pattern='x86-64|x86_64'
+    ;;
+  arm64)
+    deb_arch=arm64
+    binary_arch_pattern='aarch64|ARM aarch64'
+    ;;
+  *)
+    echo "Unsupported Linux architecture: $arch" >&2
+    exit 1
+    ;;
+esac
+
+for command in npm npx node file sha256sum dpkg-deb; do
+  if ! command -v "$command" >/dev/null 2>&1; then
+    echo "Required release command is unavailable: $command" >&2
+    exit 1
+  fi
+done
+
+cd "$workspace"
+npm run build
+
+CSC_IDENTITY_AUTO_DISCOVERY=false npx electron-builder \
+  --linux AppImage deb \
+  "--$arch" \
+  --publish never \
+  "--config.linux.artifactName=HRack-${version}-linux-${arch}.\${ext}" \
+  "--config.directories.output=$release_dir"
+
+image_name="HRack-${version}-linux-${arch}.AppImage"
+deb_name="HRack-${version}-linux-${arch}.deb"
+image_path="$(find "$release_dir" -maxdepth 1 -type f -name '*.AppImage' -print -quit)"
+deb_path="$(find "$release_dir" -maxdepth 1 -type f -name '*.deb' -print -quit)"
+executable_path="$(find "$release_dir" -maxdepth 3 -type f -name hrack -path '*linux*unpacked*' -print -quit)"
+metadata_path="$release_dir/latest-linux.yml"
+
+if [[ -z "$image_path" || ! -f "$image_path" ]]; then
+  echo 'Release output is missing: AppImage.' >&2
+  exit 1
+fi
+if [[ -z "$deb_path" || ! -f "$deb_path" ]]; then
+  echo 'Release output is missing: Debian package.' >&2
+  exit 1
+fi
+if [[ -z "$executable_path" || ! -f "$executable_path" ]]; then
+  echo 'Release output is missing: unpacked HRack executable.' >&2
+  exit 1
+fi
+if [[ ! -f "$metadata_path" ]]; then
+  echo "Release output is missing: $metadata_path" >&2
+  exit 1
+fi
+
+node "$workspace/scripts/inject-release-notes.cjs" \
+  "$metadata_path" \
+  "$workspace/CHANGELOG.md" \
+  "$version"
+node "$workspace/scripts/assert-update-metadata.cjs" \
+  "$metadata_path" \
+  "$release_dir" \
+  "$version" \
+  "$image_name" \
+  "$deb_name"
+if [[ ! -x "$image_path" || ! -x "$executable_path" ]]; then
+  echo 'Linux AppImage or unpacked application is not executable.' >&2
+  exit 1
+fi
+if ! file "$executable_path" | grep -Eq "$binary_arch_pattern"; then
+  echo "Packaged executable does not contain the expected $arch architecture." >&2
+  file "$executable_path" >&2
+  exit 1
+fi
+
+app_dir="$(dirname "$executable_path")"
+packaged_update_config="$app_dir/resources/app-update.yml"
+packaged_dsh="$app_dir/resources/dsh-runtime"
+if [[ ! -f "$packaged_update_config" ]]; then
+  echo "Packaged update config is missing: $packaged_update_config" >&2
+  exit 1
+fi
+if [[ -e "$packaged_dsh" ]]; then
+  echo "Packaged dsh runtime must be absent: $packaged_dsh" >&2
+  exit 1
+fi
+
+deb_version="$(dpkg-deb --field "$deb_path" Version)"
+deb_actual_arch="$(dpkg-deb --field "$deb_path" Architecture)"
+if [[ "$deb_version" != "$version" ]]; then
+  echo "Debian package version $deb_version does not match package version $version." >&2
+  exit 1
+fi
+if [[ "$deb_actual_arch" != "$deb_arch" ]]; then
+  echo "Debian package architecture $deb_actual_arch does not match $deb_arch." >&2
+  exit 1
+fi
+
+extract_dir="$release_dir/appimage-extracted"
+mkdir -p "$extract_dir"
+(
+  cd "$extract_dir"
+  "$image_path" --appimage-extract >/dev/null
+)
+if [[ ! -x "$extract_dir/squashfs-root/AppRun" ]]; then
+  echo 'AppImage extraction did not produce an executable AppRun.' >&2
+  exit 1
+fi
+
+if [[ -n "${DISPLAY:-}" ]]; then
+  node "$workspace/scripts/verify-packaged-tray.cjs" "$executable_path"
+elif command -v xvfb-run >/dev/null 2>&1; then
+  xvfb-run -a node "$workspace/scripts/verify-packaged-tray.cjs" "$executable_path"
+else
+  echo 'Tray verification requires DISPLAY or xvfb-run.' >&2
+  exit 1
+fi
+
+mkdir -p "$artifact_dir"
+for artifact in "$image_path:$image_name" "$deb_path:$deb_name"; do
+  source="${artifact%%:*}"
+  filename="${artifact#*:}"
+  destination="$artifact_dir/$filename"
+  cp -f "$source" "$destination"
+  digest="$(sha256sum "$destination" | awk '{print $1}')"
+  printf '%s  %s\n' "$digest" "$filename" > "$destination.sha256"
+done
+node "$workspace/scripts/assert-packaged-update-config.cjs" "$packaged_update_config"
+cp -f "$metadata_path" "$artifact_dir/latest-linux.yml"
+
+printf 'Linux release packages verified:\n'
+printf '  Version: %s\n' "$version"
+printf '  Architecture: %s\n' "$arch"
+printf '  AppImage: %s\n' "$artifact_dir/$image_name"
+printf '  Debian: %s\n' "$artifact_dir/$deb_name"
+printf '  Update metadata: %s\n' "$artifact_dir/latest-linux.yml"
+printf '  Packaged runtime/tray: verified\n'

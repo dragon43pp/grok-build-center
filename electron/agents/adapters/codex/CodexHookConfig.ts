@@ -1,0 +1,80 @@
+import { Buffer } from 'node:buffer'
+
+const EVENTS = [
+  'SessionStart',
+  'SessionEnd',
+  'SubagentStart',
+  'PreToolUse',
+  'PermissionRequest',
+  'PostToolUse',
+  'PreCompact',
+  'PostCompact',
+  'UserPromptSubmit',
+  'SubagentStop',
+  'Stop'
+] as const
+
+const POSIX_COMMAND =
+  'if [ -n "${GBC_CODEX_HOOK_BRIDGE:-}" ] && [ -f "$GBC_CODEX_HOOK_BRIDGE" ]; then /bin/sh "$GBC_CODEX_HOOK_BRIDGE" >/dev/null 2>&1 || :; fi'
+const WINDOWS_SCRIPT =
+  "$p=[Environment]::GetEnvironmentVariable('GBC_CODEX_HOOK_BRIDGE_WINDOWS'); if ($p -and (Test-Path -LiteralPath $p -PathType Leaf)) { & $p }; exit 0"
+const WINDOWS_COMMAND = `powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand ${Buffer.from(WINDOWS_SCRIPT, 'utf16le').toString('base64')}`
+
+function tomlString(value: string): string {
+  return JSON.stringify(value)
+}
+
+/** Byte-stable dotted overrides: runtime/session values only travel in env. */
+export function buildCodexInlineHookConfig(): readonly string[] {
+  const handler = `{type="command",command=${tomlString(POSIX_COMMAND)},commandWindows=${tomlString(WINDOWS_COMMAND)},timeout=3}`
+  return EVENTS.map(
+    (event) => `hooks.${event}=[{matcher=".*",hooks=[${handler}]}]`
+  )
+}
+
+export function codexWindowsHookCommand(): string {
+  return WINDOWS_COMMAND
+}
+
+export function codexPosixBridgeScript(): string {
+  return `#!/bin/sh
+set -eu
+umask 077
+drop="\${GBC_CODEX_HOOK_DROP:-}"
+[ -n "$drop" ] && [ -d "$drop" ] || exit 0
+tmp="$(mktemp "$drop/.gbc-codex.XXXXXX.partial")" || exit 0
+trap 'rm -f "$tmp"' EXIT HUP INT TERM
+dd bs=1048577 count=1 of="$tmp" 2>/dev/null || true
+size="$(wc -c < "$tmp" | tr -d ' ')"
+[ "$size" -gt 0 ] || exit 0
+[ "$size" -le 1048576 ] || exit 0
+final="$drop/$(date +%s).$$.$(basename "$tmp" .partial).json"
+mv "$tmp" "$final"
+trap - EXIT HUP INT TERM
+`
+}
+
+export function codexWindowsBridgeScript(): string {
+  return `$ErrorActionPreference = 'Stop'
+try {
+  $drop = $env:GBC_CODEX_HOOK_DROP
+  if ([string]::IsNullOrWhiteSpace($drop) -or -not [IO.Directory]::Exists($drop)) { exit 0 }
+  $inputStream = [Console]::OpenStandardInput()
+  $memory = [IO.MemoryStream]::new()
+  $buffer = [byte[]]::new(8192)
+  while (($read = $inputStream.Read($buffer, 0, $buffer.Length)) -gt 0) {
+    $memory.Write($buffer, 0, $read)
+    if ($memory.Length -gt 1048576) { exit 0 }
+  }
+  if ($memory.Length -le 0) { exit 0 }
+  $nonce = [IO.Path]::GetRandomFileName()
+  $temp = [IO.Path]::Combine($drop, ".$nonce.partial")
+  $final = [IO.Path]::Combine($drop, "$([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()).$PID.$nonce.json")
+  [IO.File]::WriteAllBytes($temp, $memory.ToArray())
+  [IO.File]::Move($temp, $final)
+} catch {
+  exit 0
+}
+exit 0
+`
+}

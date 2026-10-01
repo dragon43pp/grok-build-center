@@ -1,0 +1,198 @@
+{
+  "name": "grok-build-center",
+  "version": "1.0.0",
+  "description": "Session center for every AI coding CLI on your machine — browse, resume, total up and export",
+  "private": true,
+  "main": "out/main/index.js",
+  "scripts": {
+    "predev": "npm run subset-fonts",
+    "dev": "electron-vite dev",
+    "subset-fonts": "node scripts/subset-fonts.mjs",
+    "generate:icons": "python tools/make_brand_icons.py",
+    "assert-font-size": "node scripts/assert-font-size.mjs",
+    "assert:dsh-surface": "node scripts/assert-dsh-web-surface.mjs",
+    "ensure:dsh": "node scripts/ensure-dsh-runtime.cjs",
+    "build": "npm run subset-fonts && electron-vite build && npm run assert:dsh-surface && npm run assert-font-size",
+    "preview": "electron-vite preview",
+    "typecheck:node": "tsc -p tsconfig.node.json --noEmit",
+    "typecheck:web": "tsc -p tsconfig.web.json --noEmit",
+    "typecheck": "npm run typecheck:node && npm run typecheck:web",
+    "postinstall": "electron-rebuild -f -w node-pty",
+    "build:win": "npm run release:win",
+    "build:mac": "npm run release:mac",
+    "build:linux": "npm run release:linux",
+    "release:win": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/release-win.ps1",
+    "release:github:win": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/release-github-win.ps1",
+    "release:mac": "bash scripts/release-mac.sh",
+    "release:github:mac": "bash scripts/release-github-mac.sh",
+    "release:linux": "bash scripts/release-linux.sh",
+    "release:github:linux": "bash scripts/release-github-linux.sh",
+    "record:cli-demo": "node scripts/recording/01-create-cli-sessions.cjs",
+    "e2e": "npm run ensure:dsh && npm run build && playwright test",
+    "e2e:only": "playwright test",
+    "gbc": "electron ./out/main/index.js",
+    "hrack": "electron ./out/main/index.js"
+  },
+  "author": "",
+  "license": "Apache-2.0",
+  "build": {
+    "appId": "com.grokbuildcenter.app",
+    "productName": "Grok Build Center",
+    "artifactName": "GrokBuildCenter-Setup-${version}.${ext}",
+    "afterPack": "scripts/assert-packaged-resources.cjs",
+    "electronLanguages": [
+      "en-US",
+      "zh-CN",
+      "zh-TW",
+      "ja",
+      "ko"
+    ],
+    "files": [
+      "**/*",
+      "!resources/tray{,/**/*}",
+      "!dsh-runtime{,/**/*}",
+      "!remotes{,/**/*}",
+      "!.dev-run{,/**/*}",
+      "!.dev-shots{,/**/*}",
+      "!.theme-check{,/**/*}",
+      "!.claude{,/**/*}",
+      "!*.dsh{,/**/*}",
+      "!artifacts{,/**/*}",
+      "!dist{,/**/*}",
+      "!logs{,/**/*}",
+      "!release{,/**/*}",
+      "!release-*{,/**/*}",
+      "!test-results{,/**/*}",
+      "!playwright-report{,/**/*}",
+      "!resources/app{,/**/*}",
+      "!docs{,/**/*}",
+      "!README.md{,/**/*}",
+      "!README.zh-CN.md{,/**/*}",
+      "!CHANGELOG.md{,/**/*}"
+    ],
+    "extraResources": [
+      {
+        "from": "resources/tray",
+        "to": "tray",
+        "filter": [
+          "*.png",
+          "*.ico"
+        ]
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "resources/tray/gbc-app.ico"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "arm64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png",
+      "category": "public.app-category.developer-tools",
+      "artifactName": "GrokBuildCenter-${version}-macos-${arch}.${ext}"
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "deb",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png",
+      "category": "Development",
+      "executableName": "grok-build-center",
+      "artifactName": "GrokBuildCenter-${version}-linux-${arch}.${ext}",
+      "maintainer": "Grok Build Center",
+      "vendor": "Grok Build Center",
+      "synopsis": "Harness Rack for AI CLI sessions"
+    },
+    "dmg": {
+      "title": "Grok Build Center ${version}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Grok Build Center"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "dragon43pp",
+        "name": "grok-build-center"
+      }
+    ]
+  },
+  "dependencies": {
+    "@codemirror/language": "^6.12.4",
+    "@codemirror/language-data": "^6.5.2",
+    "@codemirror/state": "^6.7.1",
+    "@codemirror/view": "^6.43.7",
+    "@larksuiteoapi/node-sdk": "^1.74.0",
+    "@lezer/highlight": "^1.2.3",
+    "@lobehub/icons": "^5.15.0",
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/addon-webgl": "0.20.0-beta.291",
+    "@xterm/xterm": "6.1.0-beta.292",
+    "electron-updater": "^6.8.9",
+    "gsap": "^3.15.0",
+    "lucide-react": "^1.28.0",
+    "motion": "^12.43.0",
+    "node-pty": "^1.1.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
+    "uqr": "^0.1.3",
+    "ws": "^8.21.3",
+    "zustand": "^5.0.14"
+  },
+  "devDependencies": {
+    "@electron/rebuild": "^4.2.0",
+    "@playwright/test": "^1.62.1",
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/node": "^26.1.2",
+    "@types/pngjs": "^6.0.5",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@types/ws": "^8.18.1",
+    "@vitejs/plugin-react": "^5.2.0",
+    "electron": "^43.2.0",
+    "electron-builder": "^26.15.3",
+    "electron-vite": "^5.0.0",
+    "jsqr": "^1.4.0",
+    "pngjs": "^7.0.0",
+    "subset-font": "^2.5.0",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^7.0.2",
+    "vite": "^7.3.6"
+  }
+}

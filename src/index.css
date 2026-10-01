@@ -1,0 +1,527 @@
+@import "tailwindcss";
+
+@font-face {
+  font-family: "Maple Mono";
+  src: url("./assets/fonts/maple-mono/MapleMono-Regular.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+}
+
+[data-session-dragging='true'] {
+  opacity: 0.28;
+}
+
+[data-session-drop-before='true']::before,
+[data-session-drop-end='true']::after {
+  content: '';
+  position: absolute;
+  z-index: 5;
+  right: 4px;
+  left: 4px;
+  height: 3px;
+  border-radius: 999px;
+  background: var(--gbc-accent-target);
+  box-shadow:
+    0 0 0 1px var(--gbc-bg-surface),
+    0 0 9px color-mix(in srgb, var(--gbc-accent-target) 70%, transparent);
+}
+
+[data-session-drop-before='true']::before {
+  top: -5px;
+}
+
+[data-session-drop-end='true'] {
+  position: relative;
+}
+
+[data-session-drop-end='true']::after {
+  bottom: -5px;
+}
+
+.session-card-replica > * {
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  transform: none !important;
+}
+
+@font-face {
+  font-family: "Maple Mono";
+  src: url("./assets/fonts/maple-mono/MapleMono-Bold.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 700;
+  font-display: block;
+}
+
+@font-face {
+  font-family: "Maple Mono";
+  src: url("./assets/fonts/maple-mono/MapleMono-Italic.woff2") format("woff2");
+  font-style: italic;
+  font-weight: 400;
+  font-display: block;
+}
+
+@font-face {
+  font-family: "Maple Mono";
+  src: url("./assets/fonts/maple-mono/MapleMono-BoldItalic.woff2") format("woff2");
+  font-style: italic;
+  font-weight: 700;
+  font-display: block;
+}
+
+@font-face {
+  font-family: "PingFang SC";
+  src: url("./assets/fonts/.subset/PingFangSC-Regular.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "PingFang SC";
+  src: url("./assets/fonts/.subset/PingFangSC-Medium.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "PingFang SC";
+  src: url("./assets/fonts/.subset/PingFangSC-Semibold.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Center Brand";
+  src: url("./assets/fonts/.subset/center-brand.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+@theme inline {
+  --font-sans: var(--font-pingfang);
+  --font-heading: var(--font-pingfang);
+  --font-brand: "Center Brand", sans-serif;
+  /* PingFang 无谚文/部分日文假名；ko/ja 界面字形回退平台系统栈（M5.c §4.6） */
+  --font-pingfang: "PingFang SC", "PingFang TC", "Hiragino Sans GB", "Microsoft YaHei",
+    "Apple SD Gothic Neo", "Malgun Gothic", "Hiragino Kaku Gothic ProN", Meiryo,
+    "Yu Gothic", sans-serif;
+  /* 内嵌标准版 Maple 无中文字形；中文回退到界面普通字体（原型本机装的是
+     Maple Mono NF CN），不要落到 generic monospace（Windows 会命中宋体）。 */
+  --font-maple: "Maple Mono", "PingFang SC", "PingFang TC", "Hiragino Sans GB", "Microsoft YaHei", ui-monospace, monospace;
+
+  --color-app: var(--gbc-bg-app);
+  --color-content: var(--gbc-bg-content);
+  --color-surface: var(--gbc-bg-surface);
+  --color-surface-hover: var(--gbc-bg-surface-hover);
+  --color-surface-strong: var(--gbc-bg-surface-strong);
+  --color-control: var(--gbc-bg-control);
+  --color-control-active: var(--gbc-bg-control-active);
+  --color-overlay: var(--gbc-bg-overlay);
+  --color-backdrop: var(--gbc-bg-backdrop);
+  --color-backdrop-strong: var(--gbc-bg-backdrop-strong);
+  --color-text-primary: var(--gbc-text-primary);
+  --color-text-secondary: var(--gbc-text-secondary);
+  --color-text-strong: var(--gbc-text-strong);
+  --color-text-muted: var(--gbc-text-muted);
+  --color-text-faint: var(--gbc-text-faint);
+  --color-text-disabled: var(--gbc-text-disabled);
+  --color-text-inverse: var(--gbc-text-inverse);
+  --color-border-default: var(--gbc-border-default);
+  --color-border-subtle: var(--gbc-border-subtle);
+  --color-border-faint: var(--gbc-border-faint);
+  --color-border-strong: var(--gbc-border-strong);
+  --color-border-control: var(--gbc-border-control);
+  --color-flame: var(--gbc-accent-flame);
+  --color-cursor-accent: var(--gbc-accent-cursor);
+  --color-target-accent: var(--gbc-accent-target);
+  --color-brand-logo: var(--gbc-brand-logo);
+  --color-brand-logo-shine: var(--gbc-brand-logoShine);
+  --color-brand-logo-muted: var(--gbc-brand-logoMuted);
+  --color-status-working: var(--gbc-status-working);
+  --color-status-working-dot: var(--gbc-status-working-dot);
+  --color-status-needs-you: var(--gbc-status-needsYou);
+  --color-status-needs-you-dot: var(--gbc-status-needsYou-dot);
+  --color-status-done: var(--gbc-status-done);
+  --color-status-done-dot: var(--gbc-status-done-dot);
+  --color-status-error: var(--gbc-status-error);
+  --color-status-error-dot: var(--gbc-status-error-dot);
+  --color-status-idle: var(--gbc-status-idle);
+  --color-status-idle-dot: var(--gbc-status-idle-dot);
+  --color-status-exited: var(--gbc-status-exited);
+  --color-status-exited-dot: var(--gbc-status-exited-dot);
+  --color-button-primary: var(--gbc-button-primary-bg);
+  --color-button-primary-hover: var(--gbc-button-primary-bg-hover);
+  --color-button-primary-fg: var(--gbc-button-primary-fg);
+  --color-button-secondary: var(--gbc-button-secondary-bg);
+  --color-button-secondary-hover: var(--gbc-button-secondary-bg-hover);
+  --color-button-secondary-fg: var(--gbc-button-secondary-fg);
+  --color-input: var(--gbc-input-bg);
+  --color-input-hover: var(--gbc-input-bg-hover);
+  --color-input-focus: var(--gbc-input-border-focus);
+  --color-focus-ring: var(--gbc-focus-ring);
+}
+
+html,
+body,
+#gbc-root {
+  height: 100%;
+  margin: 0;
+}
+
+#gbc-root {
+  display: flex;
+  min-height: 100%;
+  flex-direction: column;
+}
+
+html {
+  font-family: var(--font-pingfang);
+}
+
+html.workspace-splitting,
+html.workspace-splitting * {
+  cursor: col-resize !important;
+  user-select: none !important;
+}
+
+body {
+  background-color: var(--gbc-bg-app);
+  color: var(--gbc-text-primary);
+  overflow: hidden;
+}
+
+html[data-surface="floating"],
+html[data-surface="floating"] body,
+html[data-surface="floating"] #gbc-root {
+  background: transparent;
+}
+
+@keyframes floating-attention-persistent {
+  0%,
+  100% {
+    border-color: var(--gbc-border-default);
+    box-shadow: 0 3px 8px -4px rgb(0 0 0 / 28%);
+  }
+  50% {
+    border-color: var(--gbc-status-needsYou);
+    box-shadow:
+      0 0 0 3px color-mix(in srgb, var(--gbc-status-needsYou) 28%, transparent),
+      0 0 18px color-mix(in srgb, var(--gbc-status-needsYou) 45%, transparent);
+  }
+}
+
+@keyframes floating-attention-complete {
+  0%,
+  100% {
+    border-color: var(--gbc-border-default);
+    box-shadow: 0 3px 8px -4px rgb(0 0 0 / 28%);
+  }
+  45% {
+    border-color: var(--gbc-status-done);
+    box-shadow:
+      0 0 0 3px color-mix(in srgb, var(--gbc-status-done) 24%, transparent),
+      0 0 16px color-mix(in srgb, var(--gbc-status-done) 42%, transparent);
+  }
+}
+
+.floating-attention-persistent {
+  animation: floating-attention-persistent 1.6s ease-in-out infinite;
+}
+
+.floating-attention-complete {
+  animation: floating-attention-complete 0.8s ease-out 3;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .floating-attention-persistent,
+  .floating-attention-complete {
+    animation: none;
+  }
+
+  .floating-attention-persistent {
+    border-color: var(--gbc-status-needsYou);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--gbc-status-needsYou) 28%, transparent);
+  }
+
+  .floating-attention-complete {
+    border-color: var(--gbc-status-done);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--gbc-status-done) 24%, transparent);
+  }
+}
+
+/* 应用壳层文案不可拖选；可编辑控件仍保留光标选区能力。终端页面在
+   TerminalPage 上单独恢复 select-text，避免影响终端复制。 */
+input,
+textarea,
+[contenteditable="true"] {
+  user-select: text;
+}
+
+/* 注意：不要在这里写未分层的 button { font: inherit } —— 未分层规则会压过
+   @layer utilities，导致按钮上的 text-[NNpx] 全部失效（Tailwind preflight
+   已在 @layer base 内做了同样的 reset）。 */
+
+.app-shell {
+  background: var(--gbc-bg-app);
+}
+
+.app-drag-region {
+  -webkit-app-region: drag;
+}
+
+.app-no-drag,
+.app-no-drag * {
+  -webkit-app-region: no-drag;
+}
+
+.titlebar {
+  /* 透明：露出 app-shell 根上的底色与环境渐变层 */
+  background: transparent;
+  color: var(--gbc-titlebar-fg);
+}
+
+.titlebar-macos .titlebar-actions {
+  padding-left: 78px;
+}
+
+/* 原生全屏会隐藏 macOS 红绿灯，不再保留其左侧占位。 */
+.titlebar-macos-fullscreen .titlebar-actions {
+  padding-left: 12px;
+}
+
+/* 原型：标题栏功能按钮 text-neutral-500 → hover neutral-800 / 激活 neutral-900 */
+.titlebar-action {
+  color: var(--gbc-text-muted);
+}
+
+.titlebar-action:hover:not(:disabled) {
+  background: var(--gbc-titlebar-bg-hover);
+  color: var(--gbc-text-secondary);
+}
+
+.titlebar-action-active,
+.titlebar-action-active:hover:not(:disabled) {
+  background: var(--gbc-titlebar-bg-hover);
+  color: var(--gbc-text-primary);
+}
+
+.titlebar-action:disabled {
+  color: var(--gbc-text-disabled);
+  cursor: default;
+}
+
+.window-control {
+  position: relative;
+  display: grid;
+  width: 46px;
+  place-items: center;
+  color: var(--gbc-titlebar-fg);
+  transition: background-color 100ms ease, color 100ms ease;
+}
+
+.window-control:hover {
+  background: var(--gbc-titlebar-bg-hover);
+  color: var(--gbc-titlebar-fg-hover);
+}
+
+.window-control-close:hover {
+  background: var(--gbc-titlebar-close-bg-hover);
+  color: var(--gbc-titlebar-close-fg-hover);
+}
+
+.window-control-minimize {
+  width: 10px;
+  border-top: 1px solid currentColor;
+}
+
+.window-control-maximize {
+  width: 10px;
+  height: 10px;
+  border: 1px solid currentColor;
+}
+
+.window-control-restore {
+  position: relative;
+  width: 10px;
+  height: 10px;
+  border: 1px solid currentColor;
+}
+
+.window-control-restore::before {
+  position: absolute;
+  top: -4px;
+  left: 2px;
+  width: 9px;
+  height: 9px;
+  border: 1px solid currentColor;
+  background: var(--gbc-bg-app);
+  content: "";
+}
+
+.window-control:hover .window-control-restore::before {
+  background: var(--gbc-titlebar-bg-hover);
+}
+
+/* 关闭按钮画一个 10×10 的 X：两条对角线分别绕自身中心旋转 ±45°。 */
+.window-control-close-icon {
+  position: relative;
+  width: 10px;
+  height: 10px;
+}
+
+.window-control-close-icon::before,
+.window-control-close-icon::after {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 14px;
+  border-top: 1px solid currentColor;
+  content: "";
+}
+
+.window-control-close-icon::before {
+  transform: translate(-50%, -50%) rotate(45deg);
+}
+
+.window-control-close-icon::after {
+  transform: translate(-50%, -50%) rotate(-45deg);
+}
+
+.sidebar-scroll {
+  scrollbar-color: var(--gbc-scrollbar-thumb) transparent;
+  scrollbar-width: thin;
+}
+
+.sidebar-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+
+.sidebar-scroll::-webkit-scrollbar-track {
+  margin-block: 4px;
+  background: transparent;
+}
+
+.sidebar-scroll::-webkit-scrollbar-thumb {
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: var(--gbc-scrollbar-thumb);
+  background-clip: content-box;
+}
+
+.sidebar-scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--gbc-scrollbar-thumb-hover);
+  background-clip: content-box;
+}
+
+.sidebar-scroll::-webkit-scrollbar-thumb:active {
+  background: var(--gbc-scrollbar-thumb-active);
+  background-clip: content-box;
+}
+
+.workspace-reader-scrollbars,
+.workspace-reader-scrollbars * {
+  scrollbar-color: var(--gbc-scrollbar-thumb) transparent;
+  scrollbar-width: thin;
+}
+
+.workspace-reader-scrollbars ::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.workspace-reader-scrollbars ::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.workspace-reader-scrollbars ::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: var(--gbc-scrollbar-thumb);
+}
+
+.workspace-reader-scrollbars ::-webkit-scrollbar-thumb:hover {
+  background: var(--gbc-scrollbar-thumb-hover);
+}
+
+.top-tab-viewport {
+  min-width: 0;
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    black 10px,
+    black calc(100% - 10px),
+    transparent
+  );
+}
+
+/* 顶部 Tab 滚动区：隐藏滚动条，横向滚动交给滚轮（TopTabBar 里做 deltaY 转换） */
+.scrollbar-hidden {
+  scrollbar-width: none;
+}
+
+.scrollbar-hidden::-webkit-scrollbar {
+  display: none;
+}
+
+.shell-popover {
+  box-shadow: 0 20px 25px -5px var(--gbc-shadow-popover);
+}
+
+/* 原型 hover 卡：transition-opacity delay-150，进入前先停 150ms 再淡入 */
+@keyframes hover-card-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.hover-card-delayed {
+  opacity: 0;
+  animation: hover-card-in 150ms ease-out 150ms forwards;
+}
+
+.terminal-has-background .xterm,
+.terminal-has-background .xterm-viewport,
+.terminal-has-background .xterm-screen {
+  background-color: transparent !important;
+}
+
+/* DOM 渲染器会露出 xterm-viewport 的 overflow:scroll 槽；滚轮滚动仍可用。 */
+.terminal-has-background .xterm-viewport {
+  scrollbar-width: none;
+}
+
+.terminal-has-background .xterm-viewport::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+.shell-sheet {
+  box-shadow: 0 -18px 40px var(--gbc-shadow-window);
+}
+
+@keyframes copy-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.copy-toast {
+  border-color: var(--gbc-border-default);
+  background: var(--gbc-bg-overlay);
+  box-shadow: 0 10px 15px -3px var(--gbc-shadow-popover);
+  color: var(--gbc-text-primary);
+  animation: copy-toast-in 140ms ease-out;
+}

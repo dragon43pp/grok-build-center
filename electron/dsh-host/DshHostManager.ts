@@ -1,0 +1,851 @@
+import { app } from 'electron'
+import { execFile, spawn, type ChildProcess } from 'node:child_process'
+import { promisify } from 'node:util'
+import { createServer } from 'node:net'
+import { isAbsolute, join } from 'node:path'
+import type { CliInstallation } from '../../shared/ipc-contract'
+import {
+  DshEventChannel,
+  type DshHomeMode,
+  type DshHostStatus,
+  type DshRetentionPolicy,
+  type DshRuntimeCandidate,
+  type DshRuntimeConfig,
+  type DshRuntimePreference,
+  type DshRuntimeScanReport
+} from '../../shared/dsh-ipc'
+import {
+  DSH_CLI_DEFINITION_ID,
+  type AiCliDiscoveryService
+} from '../ai-cli-discovery'
+import { getMainPrefs, persistMainPrefs } from '../main-prefs'
+import { resolveNativeDshHome, resolveWslDshHome } from '../app-paths'
+import {
+  DSH_WSL_PID_MARKER,
+  buildDshExternalSpawnSpec,
+  dshCandidateFromInstallation,
+  dshRejectedNoOpenOption,
+  selectDshRuntimeCandidates
+} from './DshRuntime'
+import { preflightRemoteDsh } from './RemoteDshPreflight'
+import {
+  dshAuthenticatedPageUrl,
+  exchangeDshLaunchToken,
+  parseDshLaunchToken,
+  redactDshLaunchToken
+} from './DshBrowserAuth'
+
+/**
+ * DshHostManager —— 对外只暴露一个 DSH Web host，内部由当前主机安装或
+ * 指定 WSL 发行版提供。未发现安装时不启动。surface / wire / projector
+ * 不需要知道运行时来自哪里，始终只消费通过能力门禁的 loopback baseUrl。
+ */
+
+const HOST_STARTUP_TIMEOUT_MS = 30_000
+const HOST_READY_POLL_MS = 250
+const OUTPUT_TAIL_LIMIT = 32 * 1024
+
+export type DshRpcConvention = 'legacy' | 'typert'
+
+/** 0.1.1 and earlier: dotted Host RPC, empty payload. */
+const LEGACY_CONTROL_PLANE = [
+  { method: 'session.list', payload: {} },
+  { method: 'workspace.list', payload: {} }
+] as const
+
+/** 0.1.2+: Typert `/api/<ns>/<method>` with named args. workspace.list is gone. */
+const TYPERT_CONTROL_PLANE = [
+  { method: 'session/list', payload: { args: { _request: {} } } }
+] as const
+
+const execFileAsync = promisify(execFile)
+
+export interface RemoteDshHostConfig {
+  /** Canonical public HTTPS origin advertised by the current Relay. */
+  publicOrigin: string
+  /** Absolute product-owned overlay path, never below DSH_HOME. */
+  overlayPath: string
+}
+
+function validateRemoteConfig(config: RemoteDshHostConfig): void {
+  const url = new URL(config.publicOrigin)
+  if (
+    url.protocol !== 'https:' ||
+    url.origin !== config.publicOrigin ||
+    url.pathname !== '/' ||
+    url.search ||
+    url.hash ||
+    url.username ||
+    url.password
+  ) {
+    throw new Error('DSH public origin must be a canonical HTTPS origin')
+  }
+  if (
+    !config.overlayPath ||
+    !isAbsolute(config.overlayPath) ||
+    config.overlayPath.includes('\0')
+  ) {
+    throw new Error('DSH remote overlay path is invalid')
+  }
+}
+
+function dshHomeOverride(): string | undefined {
+  return process.env['GBC_DSH_HOME']?.trim() || undefined
+}
+
+interface ManagedDshChild {
+  readonly pid?: number
+  readonly stdout: NodeJS.ReadableStream | null
+  readonly stderr: NodeJS.ReadableStream | null
+  kill(): void
+  onceExit(listener: (code: number | null, error?: Error) => void): void
+}
+
+interface DshLaunchTarget {
+  candidate: DshRuntimeCandidate
+  installation?: CliInstallation
+}
+
+function wrapSpawnedProcess(child: ChildProcess): ManagedDshChild {
+  return {
+    pid: child.pid,
+    stdout: child.stdout,
+    stderr: child.stderr,
+    kill: () => {
+      child.kill()
+    },
+    onceExit: (listener) => {
+      let settled = false
+      const finish = (code: number | null, error?: Error): void => {
+        if (settled) return
+        settled = true
+        listener(code, error)
+      }
+      child.once('error', (error) => finish(null, error))
+      child.once('exit', (code) => finish(code))
+    }
+  }
+}
+
+export interface DshHostManagerOptions {
+  /** 默认 DSH_HOME（<userData>/dsh-home），由 main 注入。 */
+  defaultDshHome: string
+  discovery: Pick<
+    AiCliDiscoveryService,
+    'scanDefinition' | 'runtimeEnvironment' | 'runtimeHome'
+  >
+  broadcast: (channel: string, payload: DshHostStatus) => void
+  onBecameReady?: () => void
+  onLeftReady?: () => void
+  /** Host is stopping only to start again; keep GBC slots and the surface. */
+  onRestarting?: () => void
+}
+
+/** 预分配一个 Windows/当前主机 loopback 空闲端口。 */
+function allocatePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const server = createServer()
+    server.once('error', reject)
+    server.listen(0, '127.0.0.1', () => {
+      const address = server.address()
+      if (address === null || typeof address === 'object' && !address.port) {
+        server.close()
+        reject(new Error('failed to allocate a loopback port'))
+        return
+      }
+      const port = typeof address === 'object' ? address.port : 0
+      server.close(() => resolve(port))
+    })
+  })
+}
+
+function isRuntimePreference(value: unknown): value is DshRuntimePreference {
+  if (!value || typeof value !== 'object') return false
+  const raw = value as { kind?: unknown; installationId?: unknown }
+  return (
+    raw.kind === 'auto' ||
+    (
+      raw.kind === 'installation' &&
+      typeof raw.installationId === 'string' &&
+      raw.installationId.length > 0 &&
+      raw.installationId.length <= 4_096
+    )
+  )
+}
+
+function trimPosixHome(home: string): string {
+  return home === '/' ? '' : home.replace(/\/+$/, '')
+}
+
+export class DshHostManager {
+  private child: ManagedDshChild | null = null
+  private status: DshHostStatus = { state: 'stopped' }
+  private starting: Promise<DshHostStatus> | null = null
+  private stopping: Promise<DshHostStatus> | null = null
+  private outputTail = ''
+  private activeWslProcess: { distro: string; pid: number } | null = null
+  private activeWindowsProcessTreePid: number | null = null
+  private activePosixProcessGroupPid: number | null = null
+  private remoteConfig: RemoteDshHostConfig | null = null
+  private activeRemoteConfigKey: string | null = null
+  private restarting = false
+  /** 每次 stop() 递增；进行中的 start 据此放弃后续 spawn/重试。 */
+  private stopEpoch = 0
+  private disposed = false
+  private launchToken: string | null = null
+  private loopbackCookie: string | null = null
+  private publicCookie: string | null = null
+  private rpcStyle: DshRpcConvention | null = null
+
+  constructor(private readonly options: DshHostManagerOptions) {}
+
+  getStatus(): DshHostStatus {
+    return this.status
+  }
+
+  /** Cookie for loopback Host (waitReady, projector, wire). */
+  loopbackSessionCookie(): string | undefined {
+    return this.loopbackCookie ?? undefined
+  }
+
+  /** Cookie for the current public-origin Host (tunnel, remote preflight). */
+  publicSessionCookie(): string | undefined {
+    return this.publicCookie ?? undefined
+  }
+
+  /** Official page URL; includes `?token=` when this process uses browser auth. */
+  pageUrl(baseUrl: string): string {
+    return dshAuthenticatedPageUrl(baseUrl, this.launchToken)
+  }
+
+  /** Control-plane RPC spelling detected while the host became ready. */
+  rpcConvention(): DshRpcConvention | undefined {
+    return this.rpcStyle ?? undefined
+  }
+
+  /** 内置版与 native 安装沿用现有 Windows/macOS/Linux DSH_HOME 语义。 */
+  resolveHome(): string {
+    const override = dshHomeOverride()
+    if (override) return override
+    const mode = getMainPrefs().dshHomeMode
+    return resolveNativeDshHome(
+      mode,
+      app.getPath('home'),
+      this.options.defaultDshHome
+    )
+  }
+
+  getConfig(): DshRuntimeConfig {
+    const prefs = getMainPrefs()
+    return {
+      homeMode: prefs.dshHomeMode,
+      isolatedHome: this.options.defaultDshHome,
+      sharedHome: join(app.getPath('home'), '.dsh'),
+      activeHome: this.status.dshHome ?? this.resolveHome(),
+      envOverride: Boolean(dshHomeOverride()),
+      retention: prefs.dshRetention,
+      runtimePreference: prefs.dshRuntimePreference,
+      activeRuntime: this.status.activeRuntime
+    }
+  }
+
+  async scanRuntimes(force = false): Promise<DshRuntimeScanReport> {
+    const report = await this.options.discovery.scanDefinition(
+      DSH_CLI_DEFINITION_ID,
+      force
+    )
+    const localCandidates = report.installations.map(
+      dshCandidateFromInstallation
+    )
+    return {
+      startedAt: report.startedAt,
+      finishedAt: report.finishedAt,
+      candidates: selectDshRuntimeCandidates(
+        { kind: 'auto' },
+        localCandidates
+      ),
+      runtimeErrors: report.runtimeErrors
+    }
+  }
+
+  async setRuntime(
+    preference: DshRuntimePreference
+  ): Promise<DshHostStatus> {
+    if (!isRuntimePreference(preference)) {
+      throw new Error('invalid dsh runtime preference')
+    }
+    const shouldRestart = this.status.state !== 'stopped'
+    await persistMainPrefs({ dshRuntimePreference: preference })
+    return shouldRestart ? this.restart() : this.status
+  }
+
+  async setHomeMode(mode: DshHomeMode): Promise<DshHostStatus> {
+    if (mode !== 'isolated' && mode !== 'shared') {
+      throw new Error('invalid dsh home mode')
+    }
+    await persistMainPrefs({ dshHomeMode: mode })
+    return this.restart()
+  }
+
+  async setRetention(policy: DshRetentionPolicy): Promise<DshRuntimeConfig> {
+    await persistMainPrefs({ dshRetention: policy })
+    return this.getConfig()
+  }
+
+  /**
+   * Switch the managed host to the public-authority/browse profile. A changed
+   * authority or overlay always creates a fresh host generation.
+   */
+  async configureRemoteWeb(config: RemoteDshHostConfig): Promise<DshHostStatus> {
+    validateRemoteConfig(config)
+    const key = `${config.publicOrigin}\n${config.overlayPath}`
+    this.remoteConfig = { ...config }
+    if (this.status.state === 'ready' && this.activeRemoteConfigKey === key) {
+      return this.status
+    }
+    if (this.starting) await this.starting
+    if (this.status.state === 'stopped') return this.status
+    return this.restart()
+  }
+
+  async restart(): Promise<DshHostStatus> {
+    this.restarting = true
+    try {
+      await this.stop()
+      return await this.ensureStarted()
+    } finally {
+      this.restarting = false
+    }
+  }
+
+  /** 幂等启动；starting 中的并发调用共享同一个 Promise。 */
+  ensureStarted(): Promise<DshHostStatus> {
+    if (this.disposed) return Promise.resolve(this.status)
+    if (this.stopping) return this.stopping.then(() => this.ensureStarted())
+    if (this.status.state === 'ready') return Promise.resolve(this.status)
+    if (this.starting) return this.starting
+    this.starting = this.start().finally(() => {
+      this.starting = null
+    })
+    return this.starting
+  }
+
+  stop(): Promise<DshHostStatus> {
+    if (this.stopping) return this.stopping
+    // 先递增代数再杀子进程：进行中的 start() 会在下一次 spawn/重试前看到
+    // 代数变化并放弃，避免 dispose()/stop() 返回后又拉起新的 DSH 子进程。
+    this.stopEpoch += 1
+    this.stopping = this.finishStop(this.starting).finally(() => {
+      this.stopping = null
+    })
+    return this.stopping
+  }
+
+  private async finishStop(
+    starting: Promise<DshHostStatus> | null
+  ): Promise<DshHostStatus> {
+    await this.stopChild()
+    // 旧启动必须收尾，restart 才能创建新一代，而不是复用已取消的 Promise。
+    await starting
+    this.activeRemoteConfigKey = null
+    this.setStatus({
+      state: 'stopped',
+      dshHome: this.status.dshHome,
+      activeRuntime: this.status.activeRuntime
+    })
+    return this.status
+  }
+
+  async dispose(): Promise<void> {
+    this.disposed = true
+    await this.stop()
+  }
+
+  private setStatus(next: DshHostStatus): void {
+    const previous = this.status.state
+    this.status = next
+    if (previous !== next.state) {
+      const detail = next.error ? `: ${next.error}` : ''
+      const message = `[dsh-host] state ${previous} -> ${next.state}${detail}`
+      if (next.state === 'failed') console.error(message)
+      else console.log(message)
+    }
+    this.options.broadcast(DshEventChannel.StatusChanged, next)
+    if (previous !== 'ready' && next.state === 'ready') {
+      this.options.onBecameReady?.()
+    } else if (previous === 'ready' && next.state !== 'ready') {
+      if (this.restarting) this.options.onRestarting?.()
+      else this.options.onLeftReady?.()
+    }
+  }
+
+  private appendOutput(chunk: string): void {
+    this.outputTail = (this.outputTail + chunk).slice(-OUTPUT_TAIL_LIMIT)
+    const token = parseDshLaunchToken(this.outputTail)
+    if (token) this.launchToken = token
+  }
+
+  private clearAuth(): void {
+    this.launchToken = null
+    this.loopbackCookie = null
+    this.publicCookie = null
+    this.rpcStyle = null
+  }
+
+  private errorTail(): string {
+    return redactDshLaunchToken(this.outputTail).slice(-2048)
+  }
+
+  private async resolveLaunchTargets(): Promise<DshLaunchTarget[]> {
+    const preference = getMainPrefs().dshRuntimePreference
+    let report: Awaited<
+      ReturnType<AiCliDiscoveryService['scanDefinition']>
+    >
+    try {
+      report = await this.options.discovery.scanDefinition(
+        DSH_CLI_DEFINITION_ID,
+        false
+      )
+    } catch (error) {
+      this.appendOutput(`runtime scan failed: ${String(error)}\n`)
+      throw error
+    }
+    const installations = new Map(
+      report.installations.map((installation) => [installation.id, installation])
+    )
+    const localCandidates = report.installations.map(
+      dshCandidateFromInstallation
+    )
+    const selected = selectDshRuntimeCandidates(preference, localCandidates)
+    if (selected.length === 0) {
+      throw new Error(
+        'No DeepSeek Harness installation was found; install dsh to use this surface'
+      )
+    }
+    return selected.map((candidate) => ({
+      candidate,
+      installation: installations.get(candidate.id)
+    }))
+  }
+
+  private resolveTargetHome(target: DshLaunchTarget): string {
+    if (
+      target.candidate.kind !== 'installation' ||
+      target.candidate.runtime.kind !== 'wsl'
+    ) {
+      return this.resolveHome()
+    }
+    const override = dshHomeOverride()
+    if (override) {
+      if (!override.startsWith('/') || override.includes('\0')) {
+        throw new Error(
+          'GBC_DSH_HOME must be a Linux absolute path for a WSL DSH runtime'
+        )
+      }
+      return override
+    }
+    if (!target.installation) {
+      throw new Error('selected WSL DSH installation is missing')
+    }
+    const home = this.options.discovery.runtimeHome(target.installation)
+    if (!home || !home.startsWith('/') || home.includes('\0')) {
+      throw new Error(
+        `cannot resolve HOME for ${target.candidate.runtime.distro}`
+      )
+    }
+    return resolveWslDshHome(getMainPrefs().dshHomeMode, trimPosixHome(home))
+  }
+
+  private async start(): Promise<DshHostStatus> {
+    const epoch = this.stopEpoch
+    this.outputTail = ''
+    this.clearAuth()
+    this.setStatus({ state: 'starting' })
+    try {
+      return await this.attemptStart(epoch)
+    } catch (error) {
+      // stop()/dispose() 已介入：状态归它管，这里不得重试也不得置 failed。
+      if (this.stopEpoch !== epoch) return this.status
+      console.warn(
+        '[dsh-host] start failed; killing and retrying once:',
+        error instanceof Error ? error.message : error
+      )
+      await this.stopChild()
+      this.outputTail = ''
+      if (this.stopEpoch !== epoch) return this.status
+      try {
+        return await this.attemptStart(epoch)
+      } catch (retryError) {
+        if (this.stopEpoch !== epoch) return this.status
+        const message =
+          retryError instanceof Error ? retryError.message : String(retryError)
+        await this.stopChild()
+        if (this.stopEpoch !== epoch) return this.status
+        this.setStatus({
+          state: 'failed',
+          dshHome: this.status.dshHome,
+          activeRuntime: this.status.activeRuntime,
+          error: `${message}\n${this.errorTail()}`
+        })
+        return this.status
+      }
+    }
+  }
+
+  private async attemptStart(epoch: number): Promise<DshHostStatus> {
+    const targets = await this.resolveLaunchTargets()
+    const failures: string[] = []
+    for (const target of targets) {
+      if (this.stopEpoch !== epoch) throw new Error('dsh host stop requested')
+      // 每个目标独立判定 --no-open：outputTail 若累计前一目标的输出，
+      // 会把无关失败误判成 --no-open 拒绝。
+      this.outputTail = ''
+      try {
+        return await this.startTarget(target, epoch)
+      } catch (error) {
+        if (this.stopEpoch !== epoch) throw new Error('dsh host stop requested')
+        const detail = error instanceof Error ? error.message : String(error)
+        failures.push(`${target.candidate.id}: ${detail}`)
+        this.appendOutput(`\n[${target.candidate.id}] ${detail}\n`)
+        await this.stopChild()
+      }
+    }
+    throw new Error(failures.join('\n'))
+  }
+
+  private async startTarget(
+    target: DshLaunchTarget,
+    epoch: number
+  ): Promise<DshHostStatus> {
+    const dshHome = this.resolveTargetHome(target)
+    const port = await allocatePort()
+    try {
+      return await this.bootTarget(target, port, dshHome, true, epoch)
+    } catch (error) {
+      if (this.stopEpoch !== epoch) throw error
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      if (this.stopEpoch !== epoch) throw error
+      if (!dshRejectedNoOpenOption(this.outputTail)) {
+        throw error
+      }
+      console.warn('[dsh-host] --no-open rejected; retrying without it')
+      await this.stopChild()
+      this.outputTail = ''
+      return this.bootTarget(target, port, dshHome, false, epoch)
+    }
+  }
+
+  private async bootTarget(
+    target: DshLaunchTarget,
+    port: number,
+    dshHome: string,
+    noOpen: boolean,
+    epoch: number
+  ): Promise<DshHostStatus> {
+    if (this.stopEpoch !== epoch) throw new Error('dsh host stop requested')
+    const baseUrl = `http://127.0.0.1:${port}`
+    const remote = await this.resolveRemoteLaunch(target)
+    // WSL 的 wslpath 转换是异步的；停止可能发生在上面的 await 期间。
+    if (this.stopEpoch !== epoch) throw new Error('dsh host stop requested')
+    const child = this.spawnTarget(target, port, dshHome, remote, noOpen)
+    this.child = child
+    this.activeWslProcess = null
+    this.activeWindowsProcessTreePid =
+      target.candidate.kind === 'installation' &&
+      target.candidate.runtime.kind === 'host' &&
+      target.candidate.runtime.platform === 'windows' &&
+      child.pid
+        ? child.pid
+        : null
+    this.activePosixProcessGroupPid =
+      target.candidate.kind === 'installation' &&
+      target.candidate.runtime.kind === 'host' &&
+      target.candidate.runtime.platform !== 'windows' &&
+      child.pid
+        ? child.pid
+        : null
+    let ready = false
+
+    const handleOutput = (data: Buffer | string, isError: boolean): void => {
+      const text = data.toString()
+      this.appendOutput(text)
+      if (
+        target.candidate.kind === 'installation' &&
+        target.candidate.runtime.kind === 'wsl'
+      ) {
+        const match = this.outputTail.match(
+          new RegExp(`${DSH_WSL_PID_MARKER}(\\d+)`)
+        )
+        const pid = Number(match?.[1])
+        if (Number.isSafeInteger(pid) && pid > 1) {
+          this.activeWslProcess = {
+            distro: target.candidate.runtime.distro,
+            pid
+          }
+        }
+      }
+      const clean = redactDshLaunchToken(text).trimEnd()
+      if (!clean) return
+      if (isError) console.error('[dsh-host]', clean)
+      else console.log('[dsh-host]', clean)
+    }
+    child.stdout?.on('data', (data: Buffer) => handleOutput(data, false))
+    child.stderr?.on('data', (data: Buffer) => handleOutput(data, true))
+    child.onceExit((code, error) => {
+      if (this.child !== child) return
+      this.child = null
+      this.activeWslProcess = null
+      this.activeWindowsProcessTreePid = null
+      this.activePosixProcessGroupPid = null
+      if (!ready) return
+      this.setStatus({
+        state: 'failed',
+        dshHome,
+        activeRuntime: target.candidate,
+        error: error
+          ? `dsh host failed: ${error.message}`
+          : `dsh host exited (code ${code}). tail:\n${this.errorTail()}`
+      })
+    })
+    this.setStatus({
+      state: 'starting',
+      dshHome,
+      pid: child.pid,
+      activeRuntime: target.candidate
+    })
+    console.log(
+      '[dsh-host] started',
+      target.candidate.id,
+      'port',
+      port,
+      'home',
+      dshHome
+    )
+    await this.waitReady(baseUrl, HOST_STARTUP_TIMEOUT_MS, epoch)
+    if (remote) {
+      if (this.launchToken) {
+        const publicCookie = await exchangeDshLaunchToken(
+          baseUrl,
+          this.launchToken,
+          new URL(remote.publicOrigin).host
+        )
+        if (this.stopEpoch !== epoch) throw new Error('dsh host stop requested')
+        this.publicCookie = publicCookie
+      }
+      await preflightRemoteDsh(
+        baseUrl,
+        remote.publicOrigin,
+        this.publicCookie ?? undefined
+      )
+    }
+    if (this.child !== child) {
+      throw new Error('dsh host exited before becoming ready')
+    }
+    if (this.stopEpoch !== epoch) throw new Error('dsh host stop requested')
+    ready = true
+    this.activeRemoteConfigKey = remote
+      ? `${remote.publicOrigin}\n${this.remoteConfig?.overlayPath ?? remote.overlayPath}`
+      : null
+    this.setStatus({
+      state: 'ready',
+      dshHome,
+      baseUrl,
+      pid: child.pid,
+      activeRuntime: target.candidate
+    })
+    return this.status
+  }
+
+  private spawnTarget(
+    target: DshLaunchTarget,
+    port: number,
+    dshHome: string,
+    remote: RemoteDshHostConfig | null,
+    noOpen?: boolean
+  ): ManagedDshChild {
+    if (!target.installation) {
+      throw new Error('selected DSH installation is missing')
+    }
+    const spec = buildDshExternalSpawnSpec({
+      candidate: target.candidate,
+      port,
+      dshHome,
+      environmentPath:
+        this.options.discovery.runtimeEnvironment(target.installation).PATH,
+      commandInterpreter: process.env.ComSpec,
+      inheritedEnv: process.env,
+      noOpen,
+      ...(remote ? { remote } : {})
+    })
+    const detached =
+      target.candidate.runtime.kind === 'host' &&
+      target.candidate.runtime.platform !== 'windows'
+    return wrapSpawnedProcess(spawn(spec.file, spec.args, {
+      env: spec.env,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      detached,
+      windowsHide: true,
+      windowsVerbatimArguments: spec.windowsVerbatimArguments ?? false
+    }))
+  }
+
+  private async resolveRemoteLaunch(
+    target: DshLaunchTarget
+  ): Promise<RemoteDshHostConfig | null> {
+    const config = this.remoteConfig
+    if (!config) return null
+    if (
+      target.candidate.kind !== 'installation' ||
+      target.candidate.runtime.kind !== 'wsl'
+    ) {
+      return { ...config }
+    }
+    const { stdout } = await execFileAsync(
+      'wsl.exe',
+      [
+        '--distribution', target.candidate.runtime.distro,
+        '--exec', 'wslpath', '-a', '-u', config.overlayPath
+      ],
+      { timeout: 5_000, windowsHide: true, encoding: 'utf8' }
+    )
+    const overlayPath = stdout.trim()
+    if (!overlayPath.startsWith('/') || overlayPath.includes('\0')) {
+      throw new Error('cannot map the GBC DSH overlay into WSL')
+    }
+    return { publicOrigin: config.publicOrigin, overlayPath }
+  }
+
+  private async stopChild(): Promise<void> {
+    const child = this.child
+    const remote = this.activeWslProcess
+    const windowsTreePid = this.activeWindowsProcessTreePid
+    const posixGroupPid = this.activePosixProcessGroupPid
+    this.child = null
+    this.activeWslProcess = null
+    this.activeWindowsProcessTreePid = null
+    this.activePosixProcessGroupPid = null
+    this.clearAuth()
+    if (remote) await this.terminateWslProcess(remote)
+    if (windowsTreePid) await this.terminateWindowsProcessTree(windowsTreePid)
+    if (posixGroupPid) {
+      try {
+        process.kill(-posixGroupPid, 'SIGTERM')
+      } catch {
+        // Already exited.
+      }
+    }
+    child?.kill()
+  }
+
+  /** npm 的 dsh.cmd 会再拉起 node；只 kill cmd 会留下真正的 host。 */
+  private terminateWindowsProcessTree(pid: number): Promise<void> {
+    return new Promise((resolve) => {
+      execFile(
+        'taskkill.exe',
+        ['/pid', String(pid), '/t', '/f'],
+        { timeout: 3_000, windowsHide: true },
+        () => resolve()
+      )
+    })
+  }
+
+  /** 先按捕获到的 Linux PID 结束目标，再回收 wsl.exe，避免遗留 host。 */
+  private terminateWslProcess(target: { distro: string; pid: number }): Promise<void> {
+    return new Promise((resolve) => {
+      execFile(
+        'wsl.exe',
+        [
+          '--distribution', target.distro,
+          '--exec', 'kill', '-TERM', String(target.pid)
+        ],
+        { timeout: 2_000, windowsHide: true },
+        () => resolve()
+      )
+    })
+  }
+
+  /**
+   * 静态首页会早于 RPC control plane 开始响应。只有 projector 依赖的
+   * RPC 均成功后，host 才能进入 ready；这同时是本机/WSL 的能力门禁。
+   * 0.1.2+ 还要先用启动 token 换到会话 cookie，未认证的 RPC 会 401。
+   * 0.1.5 的 control plane 是 Typert `session/list`，不再提供 workspace.list。
+   */
+  private async waitReady(
+    baseUrl: string,
+    timeoutMs: number,
+    epoch: number
+  ): Promise<void> {
+    const deadline = Date.now() + timeoutMs
+    let lastError: unknown = null
+    while (Date.now() < deadline) {
+      if (!this.child) throw new Error('dsh host exited before becoming ready')
+      if (this.stopEpoch !== epoch) throw new Error('dsh host stop requested')
+      try {
+        await this.ensureLoopbackSession(baseUrl, epoch)
+        const headers: Record<string, string> = {
+          'content-type': 'application/json'
+        }
+        if (this.loopbackCookie) headers.cookie = this.loopbackCookie
+        try {
+          await this.probeControlPlane(baseUrl, headers, LEGACY_CONTROL_PLANE)
+          this.rpcStyle = 'legacy'
+          return
+        } catch (legacyError) {
+          lastError = legacyError
+        }
+        await this.probeControlPlane(baseUrl, headers, TYPERT_CONTROL_PLANE)
+        this.rpcStyle = 'typert'
+        return
+      } catch (error) {
+        lastError = error
+        await new Promise((resolve) => setTimeout(resolve, HOST_READY_POLL_MS))
+      }
+    }
+    throw new Error(
+      `dsh host did not become ready within ${timeoutMs}ms: ${String(lastError)}`
+    )
+  }
+
+  private async probeControlPlane(
+    baseUrl: string,
+    headers: Record<string, string>,
+    methods: readonly { method: string; payload: unknown }[]
+  ): Promise<void> {
+    for (const { method, payload } of methods) {
+      const rpcId = crypto.randomUUID()
+      const response = await fetch(`${baseUrl}/api/${method}`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          type: 'client-request',
+          rpcId,
+          method,
+          payload
+        }),
+        signal: AbortSignal.timeout(2000)
+      })
+      if (!response.ok) throw new Error(`${method} HTTP ${response.status}`)
+      const envelope = (await response.json()) as {
+        result?: { ok?: boolean; error?: { message?: string } }
+      }
+      if (envelope.result?.ok !== true) {
+        throw new Error(
+          envelope.result?.error?.message ?? `${method} is not ready`
+        )
+      }
+    }
+  }
+
+  private async ensureLoopbackSession(
+    baseUrl: string,
+    epoch: number
+  ): Promise<void> {
+    if (this.loopbackCookie) return
+    const token = this.launchToken ?? parseDshLaunchToken(this.outputTail)
+    if (!token) return
+    this.launchToken = token
+    const cookie = await exchangeDshLaunchToken(baseUrl, token)
+    if (this.stopEpoch !== epoch) throw new Error('dsh host stop requested')
+    this.loopbackCookie = cookie
+  }
+}
