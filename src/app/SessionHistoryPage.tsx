@@ -271,7 +271,7 @@ export default function SessionHistoryPage({ clis, onResumeSession }: SessionHis
 
         {groups.map(([day, rows]) => (
           <div key={day} className="mb-2">
-            <div className="sticky top-0 z-10 bg-app/90 px-2 py-1 font-maple text-[10px] text-text-faint backdrop-blur">
+            <div className="sticky top-0 z-10 bg-app px-2 py-1 font-maple text-[10px] text-text-faint">
               {day || '—'}
             </div>
             <ul>{rows.map((session) => (

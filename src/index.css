@@ -95,8 +95,8 @@
 }
 
 @font-face {
-  font-family: "Center Brand";
-  src: url("./assets/fonts/.subset/center-brand.woff2") format("woff2");
+  font-family: "GBC Brand";
+  src: url("./assets/fonts/.subset/gbc-brand.woff2") format("woff2");
   font-style: normal;
   font-weight: 400;
   font-display: swap;
@@ -105,7 +105,7 @@
 @theme inline {
   --font-sans: var(--font-pingfang);
   --font-heading: var(--font-pingfang);
-  --font-brand: "Center Brand", sans-serif;
+  --font-brand: "GBC Brand", sans-serif;
   /* PingFang 无谚文/部分日文假名；ko/ja 界面字形回退平台系统栈（M5.c §4.6） */
   --font-pingfang: "PingFang SC", "PingFang TC", "Hiragino Sans GB", "Microsoft YaHei",
     "Apple SD Gothic Neo", "Malgun Gothic", "Hiragino Kaku Gothic ProN", Meiryo,
@@ -142,6 +142,7 @@
   --color-brand-logo: var(--gbc-brand-logo);
   --color-brand-logo-shine: var(--gbc-brand-logoShine);
   --color-brand-logo-muted: var(--gbc-brand-logoMuted);
+  --color-brand: var(--gbc-status-needsYou);
   --color-status-working: var(--gbc-status-working);
   --color-status-working-dot: var(--gbc-status-working-dot);
   --color-status-needs-you: var(--gbc-status-needsYou);

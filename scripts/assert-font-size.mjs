@@ -7,7 +7,7 @@ const assets = join(repositoryRoot, 'out', 'renderer', 'assets')
 const MAX_PINGFANG_BYTES = 1024 * 1024
 const entries = await readdir(assets)
 const pingfang = entries.filter((name) => /^PingFangSC-.*\.woff2$/i.test(name))
-const brand = entries.filter((name) => /^center-brand-.*\.woff2$/i.test(name))
+const brand = entries.filter((name) => /^gbc-brand-.*\.woff2$/i.test(name))
 const forbiddenFullFonts = entries.filter((name) =>
   /PingFangSC-(?:Light|Thin|Ultralight).*\.woff2$|\.(?:otf|ttf)$|^(?:Hey-November|Accelerare|Ammonite)-.*\.woff2$/i.test(name)
 )

@@ -120,7 +120,7 @@ export default function FirstRunOnboarding({
         >
           <header className="text-center">
             <ShinyText
-              text="center"
+              text="gbc"
               color="var(--gbc-brand-logo)"
               shineColor="var(--gbc-brand-logoShine)"
               speed={3.2}

@@ -46,7 +46,7 @@ const tabButtonClass = (active: boolean): string =>
   [
     'cursor-target flex h-7 items-center gap-1.5 rounded-lg py-1 pl-2.5 font-pingfang text-[12px] transition-colors',
     active
-      ? 'bg-surface text-text-primary shadow-sm'
+      ? 'bg-surface text-text-primary'
       : 'text-text-muted hover:bg-control hover:text-text-secondary'
   ].join(' ')
 
@@ -54,7 +54,7 @@ const iconButtonClass = (active: boolean): string =>
   [
     'cursor-target flex size-7 shrink-0 items-center justify-center rounded-lg transition-colors',
     active
-      ? 'bg-surface text-text-primary shadow-sm'
+      ? 'bg-surface text-text-primary'
       : 'text-text-faint hover:bg-control hover:text-text-secondary'
   ].join(' ')
 
@@ -223,7 +223,7 @@ export default function TopTabBar({
                   className={`${tabButtonClass(active)} pr-1`}
                 >
                   <span
-                    className={`size-1.5 shrink-0 rounded-full ${statusDot[session.status]}`}
+                    className={`size-2.5 shrink-0 rounded-full ${statusDot[session.status]}`}
                   />
                   <Icon size={13} className="size-[13px] shrink-0" />
                   {drivenSessionId === session.sessionId && (

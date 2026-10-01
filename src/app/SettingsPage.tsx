@@ -43,7 +43,7 @@ const defaultFontFamily = defaultSettings.fontFamily
 
 const defaultCustomThemeSource = JSON.stringify({
   id: CUSTOM_UI_THEME_ID,
-  name: 'Center Custom',
+  name: 'GBC Custom',
   type: 'dark',
   colors: {},
   terminal: null

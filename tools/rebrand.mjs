@@ -50,12 +50,13 @@ export const PRODUCT = {
   productNameZhTw: '工作階段中心',
   version: '1.0.0',
   appId: 'com.grokbuildcenter.app',
-  /** 界面字标。品牌字体 Ammonite 只有小写字形，且规范里「Center」才是那个大字 */
-  wordmark: 'center',
+  /** 界面字标。用户要求不叫 center，改用「gbc」（紧凑、rail 48px 也能塞、子集 3 字形）。
+   *  全名 Grok Build Center 留给窗口标题/托盘/包装；字标视觉统一用 gbc。 */
+  wordmark: 'gbc',
   /** CSS font-family 名 */
-  wordmarkFont: 'Center Brand',
-  /** Ammonite 子集产物文件名（vite 会输出成 center-brand-<hash>.woff2） */
-  brandFontFile: 'center-brand.woff2',
+  wordmarkFont: 'GBC Brand',
+  /** Ammonite 子集产物文件名（vite 会输出成 gbc-brand-<hash>.woff2） */
+  brandFontFile: 'gbc-brand.woff2',
   /** 图标文件名前缀，与 gbc-bridge / GBC_USER_DATA_DIR 同一套命名 */
   iconPrefix: 'gbc',
   /** 命名管道前缀。和已装的 HRack 必须不同，否则两边抢同一根管道 */
@@ -326,7 +327,10 @@ for (const file of [
   'src/app/HomePage.tsx',
   'src/app/Sidebar.tsx'
 ]) {
-  swap(file, 'text="hrack"', `text="${PRODUCT.wordmark}"`, `字标 -> ${PRODUCT.wordmark}`)
+  // 字标可能处于三种态：hrack（上游原态）/ center（首代改版）/ gbc（当前目标）。
+  // swapOptional 不报错，三态都能收敛到目标。
+  swapOptional(file, 'text="hrack"', `text="${PRODUCT.wordmark}"`, `字标(hrack→${PRODUCT.wordmark})`)
+  swapOptional(file, 'text="center"', `text="${PRODUCT.wordmark}"`, `字标(center→${PRODUCT.wordmark})`)
 }
 
 // 托盘悬停提示
@@ -338,17 +342,26 @@ swap(
 )
 
 // 内置主题名（主题选择器里看得见；其余内置主题是 Catppuccin / Dracula 等第三方名，不动）
-swap('src/themes/dark.json', '"name": "HRack Dark"', '"name": "Center Dark"', '主题名')
-swap('src/themes/light.json', '"name": "HRack Light"', '"name": "Center Light"', '主题名')
-swap(
+swapOptional('src/themes/dark.json', '"name": "HRack Dark"', '"name": "GBC Dark"', '主题名(hrack)')
+swapOptional('src/themes/dark.json', '"name": "Center Dark"', '"name": "GBC Dark"', '主题名(center)')
+swapOptional('src/themes/light.json', '"name": "HRack Light"', '"name": "GBC Light"', '主题名(hrack)')
+swapOptional('src/themes/light.json', '"name": "Center Light"', '"name": "GBC Light"', '主题名(center)')
+swapOptional(
   'src/app/themeRuntime.ts',
   `name: 'HRack Light (safe mode)'`,
+  `name: 'GBC Light (safe mode)'`,
+  '安全模式主题名(hrack)'
+)
+swapOptional(
+  'src/app/themeRuntime.ts',
   `name: 'Center Light (safe mode)'`,
-  '安全模式主题名'
+  `name: 'GBC Light (safe mode)'`,
+  '安全模式主题名(center)'
 )
 
 // 用户新建自定义主题时看到的那份模板
-swap('src/app/SettingsPage.tsx', `name: 'HRack Custom'`, `name: 'Center Custom'`, '自定义主题模板名')
+swapOptional('src/app/SettingsPage.tsx', `name: 'HRack Custom'`, `name: 'GBC Custom'`, '自定义主题模板名(hrack)')
+swapOptional('src/app/SettingsPage.tsx', `name: 'Center Custom'`, `name: 'GBC Custom'`, '自定义主题模板名(center)')
 
 // 设置页里的外链：上游指向 hrack.dev（他们自己的站点），我们没有那个服务。
 // 先落到我们自己的仓库；远程配对本身依赖上游服务，是否保留整个区块待定。
@@ -400,25 +413,32 @@ for (const locale of ['en', 'ja', 'ko']) {
 }
 
 // ───────────────────────── 7. 品牌字体（字标专用的字形子集）─────────────────────────
-// 上游只把 Ammonite 裁出 "hrack" 五个字形；我们的字标是 "center"（同样五个字形）。
-swap('src/index.css', 'HRack Brand', PRODUCT.wordmarkFont, '字体族名')
-swap('src/index.css', 'HRack-brand.woff2', PRODUCT.brandFontFile, '字体文件名')
-swap('scripts/subset-fonts.mjs', 'HRack-brand.woff2', PRODUCT.brandFontFile, '子集输出名')
-swap(
-  'scripts/subset-fonts.mjs',
-  `'hrack'`,
-  `'${PRODUCT.wordmark}'`,
-  '子集字形集'
-)
-swap(
+// 字标三态收敛：hrack（上游）→ center（首代）→ gbc（当前）。swapOptional 不报错。
+swapOptional('src/index.css', 'HRack Brand', PRODUCT.wordmarkFont, '字体族名(hrack)')
+swapOptional('src/index.css', 'Center Brand', PRODUCT.wordmarkFont, '字体族名(center)')
+swapOptional('src/index.css', 'HRack-brand.woff2', PRODUCT.brandFontFile, '字体文件名(hrack)')
+swapOptional('src/index.css', 'center-brand.woff2', PRODUCT.brandFontFile, '字体文件名(center)')
+swapOptional('scripts/subset-fonts.mjs', 'HRack-brand.woff2', PRODUCT.brandFontFile, '子集输出名(hrack)')
+swapOptional('scripts/subset-fonts.mjs', 'center-brand.woff2', PRODUCT.brandFontFile, '子集输出名(center)')
+swapOptional('scripts/subset-fonts.mjs', `'hrack'`, `'${PRODUCT.wordmark}'`, '子集字形集(hrack)')
+swapOptional('scripts/subset-fonts.mjs', `'center'`, `'${PRODUCT.wordmark}'`, '子集字形集(center)')
+swapOptional(
   'scripts/assert-font-size.mjs',
   '/^HRack-brand-.*\\.woff2$/i',
   `/^${PRODUCT.brandFontFile.replace('.woff2', '')}-.*\\.woff2$/i`,
-  '字体门禁正则'
+  '字体门禁正则(hrack)'
 )
-swap('src/assets/fonts/ammonite/NOTICE.md', '`hrack`', `\`${PRODUCT.wordmark}\``, '字体 NOTICE：字标')
-swap('src/assets/fonts/ammonite/NOTICE.md', 'HRack-brand.woff2', PRODUCT.brandFontFile, '字体 NOTICE：文件名')
-swap('src/themes/NOTICE.md', 'HRack', PRODUCT.productName, '主题 NOTICE：产品名')
+swapOptional(
+  'scripts/assert-font-size.mjs',
+  '/^center-brand-.*\\.woff2$/i',
+  `/^${PRODUCT.brandFontFile.replace('.woff2', '')}-.*\\.woff2$/i`,
+  '字体门禁正则(center)'
+)
+swapOptional('src/assets/fonts/ammonite/NOTICE.md', '`hrack`', `\`${PRODUCT.wordmark}\``, '字体 NOTICE：字标(hrack)')
+swapOptional('src/assets/fonts/ammonite/NOTICE.md', '`center`', `\`${PRODUCT.wordmark}\``, '字体 NOTICE：字标(center)')
+swapOptional('src/assets/fonts/ammonite/NOTICE.md', 'HRack-brand.woff2', PRODUCT.brandFontFile, '字体 NOTICE：文件名(hrack)')
+swapOptional('src/assets/fonts/ammonite/NOTICE.md', 'center-brand.woff2', PRODUCT.brandFontFile, '字体 NOTICE：文件名(center)')
+swapOptional('src/themes/NOTICE.md', 'HRack', PRODUCT.productName, '主题 NOTICE：产品名')
 
 // ───────────────────────── 8. 设计令牌前缀 ─────────────────────────
 // --hrack-* 是主题系统生成的 CSS 自定义属性，全部由 theme-schema.ts 一处生成。

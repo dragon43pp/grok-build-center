@@ -162,7 +162,7 @@ export default function Sidebar({
     >
       <div className="flex justify-center">
         <ShinyText
-          text="center"
+          text="gbc"
           color="var(--gbc-brand-logo)"
           shineColor="var(--gbc-brand-logoShine)"
           speed={3.2}
@@ -285,7 +285,7 @@ export default function Sidebar({
                       {session.name}
                     </span>
                     <span
-                      className={`size-1.5 shrink-0 rounded-full ${statusDot[session.status]}`}
+                      className={`size-2.5 shrink-0 rounded-full ${statusDot[session.status]}`}
                     />
                     {drivenSessionId === session.sessionId && (
                       <Smartphone
@@ -564,7 +564,7 @@ export default function Sidebar({
       {sessionDrag.visual && createPortal(
         <div
           data-testid="sidebar-session-drag-overlay"
-          className="session-card-replica pointer-events-none fixed z-[120] overflow-hidden rounded-lg bg-surface/95 font-pingfang text-[11px] text-text-primary shadow-xl outline outline-2 outline-border-strong"
+          className="session-card-replica pointer-events-none fixed z-[120] overflow-hidden rounded-lg bg-surface/95 font-pingfang text-[11px] text-text-primary outline outline-2 outline-border-strong"
           style={{
             left: sessionDrag.visual.x - sessionDrag.visual.grabX,
             top: sessionDrag.visual.y - sessionDrag.visual.grabY,

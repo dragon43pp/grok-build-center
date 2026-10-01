@@ -397,7 +397,7 @@ export default function HomePage({
             {strings.home.freshLabel}
           </p>
           <div className="mt-5">
-            <ShinyText text="center" color="var(--gbc-brand-logo)" shineColor="var(--gbc-brand-logoShine)" speed={3.2} spread={100} className="font-brand text-[54px] leading-none tracking-[0.08em]" />
+            <ShinyText text="gbc" color="var(--gbc-brand-logo)" shineColor="var(--gbc-brand-logoShine)" speed={3.2} spread={100} className="font-brand text-[54px] leading-none tracking-[0.08em]" />
           </div>
           <TextType
             as="h1"
@@ -623,7 +623,7 @@ export default function HomePage({
                     onClick={() => onViewSession(session)}
                     className="cursor-target flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left font-pingfang transition-colors hover:bg-surface-strong"
                   >
-                    <span className={`size-1.5 shrink-0 rounded-full ${statusDot[session.status]}`} />
+                    <span className={`size-2.5 shrink-0 rounded-full ${statusDot[session.status]}`} />
                     <span className="inline-flex size-6 shrink-0 items-center justify-center">
                       <Icon size={15} className="size-[15px]" />
                     </span>

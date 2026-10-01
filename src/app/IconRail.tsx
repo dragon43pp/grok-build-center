@@ -59,10 +59,10 @@ export default function IconRail({
       className="flex w-12 shrink-0 flex-col items-center pt-3 pb-2"
     >
       {/* 字标只用一个字母：rail 只有 48px 宽。必须是字体子集里存在的字形
-          （`scripts/subset-fonts.mjs` 的字形串是 'center'），否则回退到系统字体
+         （`scripts/subset-fonts.mjs` 的字形串是 'gbc'），否则回退到系统字体
           就成另一个样子了。 */}
       <span className="font-brand text-[20px] leading-none text-brand-logo-muted select-none">
-        c
+        g
       </span>
 
       <nav className="mt-3 flex flex-col gap-0.5">
@@ -135,7 +135,7 @@ export default function IconRail({
             >
               <Icon size={15} className="size-[15px]" />
               <span
-                className={`absolute top-1 right-1 size-1.5 rounded-full ring-2 ring-app ${statusDot[session.status]}`}
+                className={`absolute top-1 right-1 size-2 rounded-full ring-2 ring-app ${statusDot[session.status]}`}
               />
               {drivenSessionId === session.sessionId && (
                 <Smartphone
