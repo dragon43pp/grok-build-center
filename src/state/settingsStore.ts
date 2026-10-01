@@ -22,7 +22,7 @@ const LEGACY_DEFAULT_FONT_FAMILY =
 const MAPLE_NL_DEFAULT_FONT_FAMILY =
   '"Maple Mono NL", "Cascadia Mono", Consolas, "Courier New", monospace'
 
-export type NavMode = 'sidebar' | 'rail' | 'tabs'
+export type NavMode = 'sidebar' | 'rail'
 
 export interface SettingsSnapshot {
   /** 全新安装完成首次引导后置位；旧版本用户迁移时直接视为已完成。 */
@@ -167,7 +167,7 @@ type LegacySettings = Partial<SettingsSnapshot> & {
 }
 
 function isNavMode(value: unknown): value is NavMode {
-  return value === 'sidebar' || value === 'rail' || value === 'tabs'
+  return value === 'sidebar' || value === 'rail'
 }
 
 function isAppLocale(value: unknown): value is AppLocale {

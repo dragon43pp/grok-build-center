@@ -69,7 +69,7 @@ test.describe('settingsStore v15', () => {
         fontFamily: 'Custom Mono',
         fontSize: 19,
         ligatures: false,
-        navMode: 'tabs',
+        navMode: 'sidebar',
         floatEnabled: true,
         defaultTerminal: 'pwsh',
         language: 'ja'
@@ -85,7 +85,7 @@ test.describe('settingsStore v15', () => {
       fontSize: 19,
       ligatures: false,
       terminalRounded: true,
-      navMode: 'tabs',
+      navMode: 'sidebar',
       floatEnabled: false,
       defaultTerminal: 'pwsh',
       language: 'ja',

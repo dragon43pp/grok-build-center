@@ -791,8 +791,7 @@ export default function SettingsPage({
               <div className="flex items-center gap-0.5 rounded-lg bg-control p-0.5">
                 {([
                   ['sidebar', strings.settings.sidebar],
-                  ['rail', strings.settings.rail],
-                  ['tabs', strings.settings.tabs]
+                  ['rail', strings.settings.rail]
                 ] as const).map(([mode, label]) => <SegmentButton key={mode} testId={`settings-nav-${mode}`} selected={settings.navMode === mode} onClick={() => settings.setNavMode(mode)}>{label}</SegmentButton>)}
               </div>
             </Row>

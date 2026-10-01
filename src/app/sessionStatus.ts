@@ -13,7 +13,7 @@ export const sessionStatuses = [
 
 export type SessionStatus = (typeof sessionStatuses)[number]
 
-/** Shared by Sidebar, Home, TopTabBar and the designer's brand lookup.
+/** Shared by Sidebar, Home and the floating window.
  *
  *  DESIGN-SPEC §4.1：灯 10px（size-2.5），needs-you 时 12px（size-3）+ 珊瑚光晕
  *  + 2s 呼吸。working 灯也轻呼吸（表示在跑）。其余实心圆点不动画。 */

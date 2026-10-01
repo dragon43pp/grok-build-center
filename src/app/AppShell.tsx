@@ -17,7 +17,6 @@ import { readWorkspaceHistory, saveWorkspace } from './workspaceHistory'
 import TitleBar from './TitleBar'
 import Sidebar from './Sidebar'
 import IconRail from './IconRail'
-import TopTabBar from './TopTabBar'
 import TerminalPage from './TerminalPage'
 import HomePage from './HomePage'
 import SettingsPage, { type SettingsCategory } from './SettingsPage'
@@ -1049,7 +1048,7 @@ export default function AppShell() {
   // 侧栏 ↔ 图标栏共用一个容器：容器只动宽度，内容层交叉淡入淡出。
   // 不能给两种形态各建一个带退出动画的元素——退出层会叠在进入层上产生重影。
   const sideNavigation =
-    navMode !== 'tabs' ? (
+    (
       <motion.div
         key="sidenav"
         className="relative shrink-0 overflow-hidden"
@@ -1108,7 +1107,7 @@ export default function AppShell() {
           )}
         </AnimatePresence>
       </motion.div>
-    ) : null
+    )
 
   return (
     <div className="app-shell isolate relative flex h-full w-full select-none flex-col overflow-hidden">
@@ -1164,24 +1163,6 @@ export default function AppShell() {
                 : ''
           }`}
         >
-          {navMode === 'tabs' && (
-            <TopTabBar
-              pageId={pageId}
-              sessions={navigationSessions}
-              terminals={nonSessionTerminals}
-              drivenSessionId={remoteDrive.sessionId}
-              onNavigate={navigate}
-              onOpenNewSession={openNewSession}
-              onRenameSession={renameSession}
-              onCloneSession={cloneSession}
-              onCreateChildTerminal={(session) => {
-                void createChildTerminal(session)
-              }}
-              onCloseSession={requestCloseSession}
-              onCloseTerminal={closeTerminalAndRoute}
-            />
-          )}
-
           <div className="relative min-h-0 flex-1 overflow-hidden">
             {pageId === 'home' && (
               <HomePage

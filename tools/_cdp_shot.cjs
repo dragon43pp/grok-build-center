@@ -1,6 +1,7 @@
 const fs = require('fs')
 const ws = require('ws')
-const port = 9367
+const port = Number(process.argv[2]) || 9367
+const outPath = process.argv[3] || 'D:/grok-build-center-desktop/tools/_screenshot_theme.png'
 async function main() {
   const list = await (await fetch('http://127.0.0.1:' + port + '/json')).json()
   const target = list.find(t => t.type === 'page' && !t.url.startsWith('devtools://'))
@@ -19,8 +20,8 @@ async function main() {
     })
   }
   const r = await send('Page.captureScreenshot', { format: 'png' })
-  fs.writeFileSync('D:/grok-build-center-desktop/tools/_screenshot_theme.png', Buffer.from(r.data, 'base64'))
-  console.log('saved')
+  fs.writeFileSync(outPath, Buffer.from(r.data, 'base64'))
+  console.log('saved:', outPath)
   sock.close()
 }
 main().catch(e => { console.error(e.message); process.exit(1) })
