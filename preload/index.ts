@@ -58,6 +58,7 @@ import {
   type ShellApi,
   type SessionsApi,
   type SessionsDiscoverRequest,
+  type SessionsTrashRequest,
   type SpawnOptions,
   type StatsApi,
   type ThemeApi,
@@ -67,6 +68,10 @@ import {
   type WindowApi,
   type WindowPositionPayload
 } from '../shared/ipc-contract'
+import {
+  AssistantInvokeChannel,
+  type AssistantApi
+} from '../shared/assistant'
 import {
   AgentEventChannel,
   AgentInvokeChannel,
@@ -312,7 +317,17 @@ const sessionsApi: SessionsApi = {
   // 入参只传 agent 白名单；不传就等于全扫。磁盘读取全部在主进程。
   discover: (request?: SessionsDiscoverRequest) =>
     ipcRenderer.invoke(SessionsInvokeChannel.Discover, request),
-  refreshPricing: () => ipcRenderer.invoke(SessionsInvokeChannel.RefreshPricing)
+  refreshPricing: () => ipcRenderer.invoke(SessionsInvokeChannel.RefreshPricing),
+  trash: (request: SessionsTrashRequest) =>
+    ipcRenderer.invoke(SessionsInvokeChannel.TrashSession, request)
+}
+
+const assistantApi: AssistantApi = {
+  getConfig: () => ipcRenderer.invoke(AssistantInvokeChannel.GetConfig),
+  // apiKey 空字符串 = 保留已存的 key，不回传明文。
+  saveConfig: (config) => ipcRenderer.invoke(AssistantInvokeChannel.SaveConfig, config),
+  testConfig: () => ipcRenderer.invoke(AssistantInvokeChannel.TestConfig),
+  search: (request) => ipcRenderer.invoke(AssistantInvokeChannel.Search, request)
 }
 
 const agentApi: AgentApi = {
@@ -737,6 +752,7 @@ try {
   contextBridge.exposeInMainWorld('cliApi', cliApi)
   contextBridge.exposeInMainWorld('statsApi', statsApi)
   contextBridge.exposeInMainWorld('sessionsApi', sessionsApi)
+  contextBridge.exposeInMainWorld('assistantApi', assistantApi)
   contextBridge.exposeInMainWorld('agentApi', agentApi)
   contextBridge.exposeInMainWorld('workspaceReader', workspaceReader)
   contextBridge.exposeInMainWorld('appApi', appApi)

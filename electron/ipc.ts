@@ -4,7 +4,8 @@ import {
   clipboard,
   dialog,
   ipcMain,
-  type IpcMainInvokeEvent
+  type IpcMainInvokeEvent,
+  shell
 } from 'electron'
 import { join } from 'node:path'
 import { PTYManager } from './pty/PTYManager'
@@ -49,6 +50,17 @@ import { EventLog } from './events/EventLog'
 import { discoverSessions } from './sessions'
 import { refreshPricingCache } from './sessions/pricing'
 import { AGENT_IDS, type AgentId } from '../shared/session-history'
+import {
+  AssistantInvokeChannel,
+  type AssistantConfigInput,
+  type AssistantSearchRequest
+} from '../shared/assistant'
+import {
+  describeConfig,
+  loadAssistantConfig,
+  saveAssistantConfig
+} from './assistant/store'
+import { assistantPing, assistantSearch } from './assistant/search'
 import { persistMainPrefs, sanitizeFloatingAppearance } from './main-prefs'
 import {
   BUILTIN_FLOATING_RENDERER_ID,
@@ -743,6 +755,95 @@ export function registerIpc(manager: PTYManager, ctx: IpcContext): void {
     requireMainWindow(event, ctx)
     return refreshPricingCache()
   })
+
+  /**
+   * 会话移入系统回收站。先重扫该 agent，确认 id+path 确实来自本次扫描，
+   * 且路径是真实文件/目录（db 型与合成路径不在扫描产物里、天然被拒）。
+   */
+  ipcMain.handle(
+    SessionsInvokeChannel.TrashSession,
+    async (event, payload: unknown) => {
+      requireMainWindow(event, ctx)
+      const request = payload as Partial<{
+        agent: AgentId
+        id: string
+        path: string
+      }>
+      if (
+        !request ||
+        typeof request.agent !== 'string' ||
+        !AGENT_IDS.includes(request.agent as AgentId) ||
+        typeof request.id !== 'string' ||
+        typeof request.path !== 'string' ||
+        request.path === ''
+      ) {
+        return { ok: false, message: '参数不完整' }
+      }
+      try {
+        const result = await discoverSessions({ agents: [request.agent as AgentId] })
+        const match = result.sessions.find(
+          (session) => session.id === request.id && session.path === request.path
+        )
+        if (!match) {
+          return { ok: false, message: '该会话不属于磁盘上可定位的存储，拒绝删除' }
+        }
+        await shell.trashItem(request.path)
+        return { ok: true }
+      } catch (error) {
+        return {
+          ok: false,
+          message: error instanceof Error ? error.message : String(error)
+        }
+      }
+    }
+  )
+
+  /**
+   * AI 助手（会话历史智能查找）。配置只存主进程 userData，apiKey 永不回传明文；
+   * 查找时由主进程自己扫盘 + 调用户自配端点，渲染进程不碰会话清单以外的东西。
+   * 同样只对主窗口开放。
+   */
+  ipcMain.handle(AssistantInvokeChannel.GetConfig, (event) => {
+    requireMainWindow(event, ctx)
+    return describeConfig(loadAssistantConfig(app.getPath('userData')))
+  })
+
+  ipcMain.handle(AssistantInvokeChannel.SaveConfig, (event, update: unknown) => {
+    requireMainWindow(event, ctx)
+    if (!update || typeof update !== 'object') {
+      throw new Error('assistant:save-config 需要 { baseURL, apiKey, model, enabled }')
+    }
+    const input = update as Record<string, unknown>
+    const clean: AssistantConfigInput = {
+      baseURL: typeof input['baseURL'] === 'string' ? input['baseURL'] : '',
+      apiKey: typeof input['apiKey'] === 'string' ? input['apiKey'] : '',
+      model: typeof input['model'] === 'string' ? input['model'] : '',
+      enabled: input['enabled'] === true
+    }
+    return describeConfig(saveAssistantConfig(app.getPath('userData'), clean))
+  })
+
+  ipcMain.handle(AssistantInvokeChannel.TestConfig, (event) => {
+    requireMainWindow(event, ctx)
+    return assistantPing(loadAssistantConfig(app.getPath('userData')))
+  })
+
+  ipcMain.handle(
+    AssistantInvokeChannel.Search,
+    async (event, request: unknown) => {
+      requireMainWindow(event, ctx)
+      const query =
+        request && typeof request === 'object' && typeof (request as AssistantSearchRequest).query === 'string'
+          ? (request as AssistantSearchRequest)
+          : { query: '' }
+      const result = await discoverSessions()
+      return assistantSearch(
+        loadAssistantConfig(app.getPath('userData')),
+        result.sessions,
+        query
+      )
+    }
+  )
 
   ipcMain.handle(AppInvokeChannel.SetMainPrefs, (_event, update: unknown) =>
     applyMainPrefsUpdate(ctx, update)

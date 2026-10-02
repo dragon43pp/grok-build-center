@@ -21,6 +21,7 @@ import type {
 } from '../shared/ipc-contract'
 import type { NotificationSoundApi } from '../shared/notification-sound'
 import type { FloatingRendererApi } from '../shared/floating-window'
+import type { AssistantApi } from '../shared/assistant'
 import type { GBCDebugShellApi } from './app/AppShell'
 import type { WorkspaceReaderApi } from '../shared/workspace-reader'
 import type { DshApi, DshSurfaceApi, DshWireApi } from '../shared/dsh-ipc'
@@ -42,6 +43,7 @@ declare global {
     cliApi: CliApi
     statsApi: StatsApi
   sessionsApi: SessionsApi
+  assistantApi: AssistantApi
     agentApi: AgentApi
     workspaceReader: WorkspaceReaderApi
     appApi: AppApi

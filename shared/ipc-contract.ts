@@ -316,8 +316,25 @@ export const StatsInvokeChannel = {
  */
 export const SessionsInvokeChannel = {
   Discover: 'sessions:discover',
-  RefreshPricing: 'sessions:refresh-pricing'
+  RefreshPricing: 'sessions:refresh-pricing',
+  /**
+   * 把一场会话移入系统回收站（可恢复）。主进程会先重新扫描该 agent 并核对
+   * id+path 确实是扫描结果里的一场，才执行 shell.trashItem —— 防止渲染进程
+   * 借这条通道删任意路径。db 型存储（workbuddy）与合成路径（opencode）拒绝。
+   */
+  TrashSession: 'sessions:trash-session'
 } as const
+
+export interface SessionsTrashRequest {
+  agent: AgentId
+  id: string
+  path: string
+}
+
+export interface SessionsTrashResult {
+  ok: boolean
+  message?: string
+}
 
 export interface SessionsDiscoverRequest {
   /**
@@ -335,6 +352,8 @@ export interface SessionsApi {
    * 只收模型原厂渠道 —— 转售商的价格会让估算差一个数量级。
    */
   refreshPricing: () => Promise<PricingRefreshResult>
+  /** 把一场会话移入系统回收站。主进程核对后才执行，见 TrashSession 注释。 */
+  trash: (request: SessionsTrashRequest) => Promise<SessionsTrashResult>
 }
 
 export type RecordEventInput = Pick<

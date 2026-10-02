@@ -33,6 +33,7 @@ import { hasNotificationSound } from '../../shared/notification-sound'
 import { playNotificationPreview } from '../state/notificationSound'
 import RemoteSettingsSection from './RemoteSettingsSection'
 import FeishuSettingsSection from './FeishuSettingsSection'
+import AssistantSettingsSection from './AssistantSettingsSection'
 import ClickSpark from './effects/ClickSpark'
 import Dropdown, { type DropdownOption } from './Dropdown'
 import floatingRendererSkill from '../../resources/skills/create-gbc-floating-renderer/SKILL.md?raw'
@@ -62,6 +63,7 @@ const SETTINGS_CATEGORIES = [
   'session',
   'remote',
   'feishu',
+  'assistant',
   'logs',
   'update'
 ] as const
@@ -1275,6 +1277,12 @@ export default function SettingsPage({
           {category === 'feishu' && (
           <Section label="feishu" title={strings.settings.sections.feishu}>
             <FeishuSettingsSection />
+          </Section>
+          )}
+
+          {category === 'assistant' && (
+          <Section label="assistant" title={strings.settings.sections.assistant}>
+            <AssistantSettingsSection />
           </Section>
           )}
 

@@ -18,7 +18,7 @@ async function main() {
       })
     })
   }
-  const r = await send('Runtime.evaluate', { expression: expr, returnByValue: true })
+  const r = await send('Runtime.evaluate', { expression: expr, returnByValue: true, awaitPromise: true, timeout: 120000 })
   console.log(JSON.stringify(r.result && r.result.result ? r.result.result.value : r.result, null, 1))
   sock.close()
 }
