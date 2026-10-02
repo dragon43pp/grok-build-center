@@ -12,6 +12,7 @@ export const UI_COLOR_TOKENS = [
   'bg.surface.strong',
   'bg.control',
   'bg.control.active',
+  'bg.hover',
   'bg.overlay',
   'bg.backdrop',
   'bg.backdrop.strong',

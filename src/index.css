@@ -121,6 +121,7 @@
   --color-surface-strong: var(--gbc-bg-surface-strong);
   --color-control: var(--gbc-bg-control);
   --color-control-active: var(--gbc-bg-control-active);
+  --color-hover: var(--gbc-bg-hover);
   --color-overlay: var(--gbc-bg-overlay);
   --color-backdrop: var(--gbc-bg-backdrop);
   --color-backdrop-strong: var(--gbc-bg-backdrop-strong);

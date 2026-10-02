@@ -15,7 +15,6 @@ import {
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import ShinyText from './effects/ShinyText'
-import { getAdapterIcon } from './adapterIcons'
 import {
   dshSlotIdFromPage,
   sessionPage,
@@ -23,7 +22,7 @@ import {
   terminalPage,
   type PageId
 } from './pages'
-import { statusDot, statusLabel, statusTone } from './sessionStatus'
+import { statusDot, statusLabel } from './sessionStatus'
 import { useStrings, type AppStrings } from './i18n'
 import type { SessionEntry } from '../state/sessionsStore'
 import type { TerminalEntry } from '../state/terminalsStore'
@@ -211,7 +210,6 @@ export default function Sidebar({
           )}
           <ul data-testid="sidebar-session-list" className="flex flex-col gap-1.5 pr-1">
           {sessions.map((session) => {
-            const Icon = getAdapterIcon(session.adapterId)
             const children = childTerminals.filter(
               (terminal) => terminal.parentSessionId === session.sessionId
             )
@@ -228,8 +226,19 @@ export default function Sidebar({
                 key={session.sessionId}
                 data-navigation-terminal-id={session.terminalId}
                 data-navigation-root-id={session.terminalId}
-                className="group relative rounded-lg border border-transparent bg-transparent transition-colors hover:border-border-subtle hover:bg-content focus-within:border-border-subtle focus-within:bg-content"
+                className="group relative rounded-lg transition-colors hover:bg-hover"
               >
+                {/* 选中/运行中的左侧 2px 边条：当前打开 = 珊瑚，运行中未选中 = 琥珀（DESIGN-SPEC §4.3） */}
+                <span
+                  aria-hidden
+                  className={`absolute inset-y-1.5 left-0 w-0.5 rounded-full ${
+                    active
+                      ? 'bg-brand'
+                      : session.status === 'working'
+                        ? 'bg-status-working'
+                        : 'bg-transparent'
+                  }`}
+                />
                 {children.length > 0 && !renaming && (
                   <button
                     type="button"
@@ -278,15 +287,13 @@ export default function Sidebar({
                   className="cursor-target min-h-12 w-full py-1.5 pr-2.5 pl-7 text-left font-pingfang"
                 >
                   <div className="flex items-center gap-1.5">
-                    <span className="inline-flex size-3.5 shrink-0 items-center justify-center">
-                      <Icon size={14} className="size-3.5" />
+                    <span className={`shrink-0 rounded-full ${statusDot[session.status]}`} />
+                    <span className="shrink-0 font-maple text-[10px] leading-none text-text-faint">
+                      [{session.adapterId}]
                     </span>
-                    <span className="truncate text-[12px] font-semibold text-text-primary">
+                    <span className="truncate text-[13px] font-semibold text-text-primary">
                       {session.name}
                     </span>
-                    <span
-                      className={`size-2.5 shrink-0 rounded-full ${statusDot[session.status]}`}
-                    />
                     {drivenSessionId === session.sessionId && (
                       <Smartphone
                         aria-label={strings.terminal.remoteDriven}
@@ -294,14 +301,10 @@ export default function Sidebar({
                         strokeWidth={1.75}
                       />
                     )}
-                    <span className="ml-auto shrink-0 text-[11px] text-text-faint transition-opacity group-hover:opacity-0">
-                      {relativeTime(strings, session.lastActivityAt)}
-                    </span>
                   </div>
-                  <p
-                    className={`mt-0.5 truncate text-[11px] leading-snug font-medium ${statusTone[session.status]}`}
-                  >
-                    {session.detail ?? statusLabel(session.status)}
+                  <p className="mt-1 truncate font-maple text-[11px] leading-snug text-text-faint">
+                    {session.detail ?? statusLabel(session.status)} ·{' '}
+                    {relativeTime(strings, session.lastActivityAt)}
                   </p>
                 </button>
                 {!renaming && (
@@ -397,8 +400,14 @@ export default function Sidebar({
                     {children.map((terminal) => (
                       <li
                         key={terminal.id}
-                        className="group/child relative flex min-w-0 items-center rounded-md hover:bg-surface-hover"
+                        className="group/child relative flex min-w-0 items-center rounded-md transition-colors hover:bg-hover"
                       >
+                        {activeTerminalId === terminal.id && (
+                          <span
+                            aria-hidden
+                            className="absolute inset-y-1 left-0 w-0.5 rounded-full bg-brand"
+                          />
+                        )}
                         <button
                           type="button"
                           data-testid="sidebar-child-terminal-item"
@@ -456,8 +465,12 @@ export default function Sidebar({
             return (
               <li
                 key={terminal.id}
-                className="group relative flex items-center rounded-lg border border-transparent bg-transparent transition-colors hover:border-border-subtle hover:bg-content focus-within:border-border-subtle focus-within:bg-content"
+                className="group relative flex items-center rounded-lg transition-colors hover:bg-hover"
               >
+                <span
+                  aria-hidden
+                  className={`absolute inset-y-1 left-0 w-0.5 rounded-full ${active ? 'bg-brand' : 'bg-transparent'}`}
+                />
                 <button
                   type="button"
                   data-testid="sidebar-terminal-item"
