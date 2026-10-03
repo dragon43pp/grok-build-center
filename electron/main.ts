@@ -61,6 +61,7 @@ import { registerWindowsAppUserModelId } from './app-icons'
 import { resolveAppUserDataDir } from './app-paths'
 import type { BridgeHistorySession, BridgeResumeResult, BridgeSessionInfo } from '../shared/bridge-protocol'
 import { createFeishuRouter } from './feishu/router'
+import { openDomesticWorkbuddy } from './sessions/open-workbuddy'
 import { extractGbcCliArgv, runGbcCli } from './cli/gbcCli'
 import { BridgeServer } from './bridge/BridgeServer'
 import { OpenCodeControlPlane } from './bridge/OpenCodeControlPlane'
@@ -401,7 +402,21 @@ const feishuRouter = createFeishuRouter({
   sendTo: async (openId, message) => {
     await feishu.sendToOpenId(openId, message)
   },
-  isPaired: (openId) => feishu.isPaired(openId)
+  isPaired: (openId) => feishu.isPaired(openId),
+  openLatestWorkbuddy: async () => {
+    // 单独按 workbuddy 取 1 条。混在全部 CLI 的前 300 里会把国内会话挤掉。
+    const result = await controlPlane.handle('sessions.history', {
+      agent: 'workbuddy',
+      limit: 1,
+      refresh: true
+    })
+    const rows = (result.kind === 'json' ? result.value : []) as BridgeHistorySession[]
+    const latest = rows[0]
+    if (!latest?.sessionId) {
+      return { ok: false, message: '这台电脑上还没有国内 WorkBuddy 会话。' }
+    }
+    return openDomesticWorkbuddy(latest.sessionId)
+  }
 })
 
 const feishu = new FeishuService({

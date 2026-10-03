@@ -105,7 +105,12 @@ export const zhTW = {
     resumeBlockedSubagent: '子代理工作階段屬於另一場工作階段，單獨恢復沒有意義',
     resumeBlockedNoId: '這場工作階段沒有可用的 id',
     resumeBlockedUnverified: '這個 CLI 的恢復指令本機沒實測過，先不提供',
-    resumeBlockedCliMissing: (name: string) => `本機沒偵測到 ${name}，裝好並重新掃描後才能恢復`
+    resumeBlockedCliMissing: (name: string) => `本機沒偵測到 ${name}，裝好並重新掃描後才能恢復`,
+    openWorkbuddy: '打開 WorkBuddy',
+    openingWorkbuddy: '正在打開…',
+    openWorkbuddyHint: '在 WorkBuddy 裡打開上次這場國內工作階段',
+    openWorkbuddyFailed: (reason: string) => `沒打開：${reason}`,
+    openWorkbuddyNotLatest: '只打開最近一次的國內 WorkBuddy 工作階段'
   },
   usageStats: {
     title: '用量統計',

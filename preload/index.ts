@@ -58,6 +58,7 @@ import {
   type ShellApi,
   type SessionsApi,
   type SessionsDiscoverRequest,
+  type SessionsOpenWorkbuddyRequest,
   type SessionsTrashRequest,
   type SpawnOptions,
   type StatsApi,
@@ -319,7 +320,9 @@ const sessionsApi: SessionsApi = {
     ipcRenderer.invoke(SessionsInvokeChannel.Discover, request),
   refreshPricing: () => ipcRenderer.invoke(SessionsInvokeChannel.RefreshPricing),
   trash: (request: SessionsTrashRequest) =>
-    ipcRenderer.invoke(SessionsInvokeChannel.TrashSession, request)
+    ipcRenderer.invoke(SessionsInvokeChannel.TrashSession, request),
+  openWorkbuddy: (request?: SessionsOpenWorkbuddyRequest) =>
+    ipcRenderer.invoke(SessionsInvokeChannel.OpenWorkbuddy, request)
 }
 
 const assistantApi: AssistantApi = {

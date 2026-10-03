@@ -109,7 +109,12 @@ export const zhCN = {
     resumeBlockedSubagent: '子代理会话属于另一场会话，单独恢复没有意义',
     resumeBlockedNoId: '这场会话没有可用的 id',
     resumeBlockedUnverified: '这个 CLI 的恢复命令本机没实测过，先不提供',
-    resumeBlockedCliMissing: (name: string) => `本机没检测到 ${name}，装好并重新扫描后才能恢复`
+    resumeBlockedCliMissing: (name: string) => `本机没检测到 ${name}，装好并重新扫描后才能恢复`,
+    openWorkbuddy: '打开 WorkBuddy',
+    openingWorkbuddy: '正在打开…',
+    openWorkbuddyHint: '在 WorkBuddy 里打开上次这场国内会话',
+    openWorkbuddyFailed: (reason: string) => `没打开：${reason}`,
+    openWorkbuddyNotLatest: '只打开最近一次的国内 WorkBuddy 会话'
   },
   usageStats: {
     title: '用量统计',

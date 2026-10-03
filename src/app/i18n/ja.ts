@@ -106,7 +106,12 @@ export const ja = {
     resumeBlockedNoId: 'このセッションには使用できる id がありません',
     resumeBlockedUnverified: 'この CLI の再開コマンドは本機で未検証のため、提供していません',
     resumeBlockedCliMissing: (name: string) =>
-      `${name} が本機で検出されません。インストールして再スキャンすると再開できます`
+      `${name} が本機で検出されません。インストールして再スキャンすると再開できます`,
+    openWorkbuddy: 'WorkBuddy で開く',
+    openingWorkbuddy: '開いています…',
+    openWorkbuddyHint: '直前の国内 WorkBuddy セッションを開きます',
+    openWorkbuddyFailed: (reason: string) => `開けませんでした：${reason}`,
+    openWorkbuddyNotLatest: '開けるのは直前の国内 WorkBuddy セッションだけです'
   },
   usageStats: {
     title: '使用量',

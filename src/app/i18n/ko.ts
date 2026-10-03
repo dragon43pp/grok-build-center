@@ -107,7 +107,12 @@ export const ko = {
     resumeBlockedNoId: '이 세션에는 사용할 수 있는 id가 없습니다',
     resumeBlockedUnverified: '이 CLI의 재개 명령은 이 PC에서 검증되지 않아 제공하지 않습니다',
     resumeBlockedCliMissing: (name: string) =>
-      `${name}이(가) 감지되지 않았습니다. 설치 후 다시 스캔하면 재개할 수 있습니다`
+      `${name}이(가) 감지되지 않았습니다. 설치 후 다시 스캔하면 재개할 수 있습니다`,
+    openWorkbuddy: 'WorkBuddy에서 열기',
+    openingWorkbuddy: '여는 중…',
+    openWorkbuddyHint: '마지막 국내 WorkBuddy 세션을 엽니다',
+    openWorkbuddyFailed: (reason: string) => `열지 못했습니다: ${reason}`,
+    openWorkbuddyNotLatest: '가장 최근의 국내 WorkBuddy 세션만 열 수 있습니다'
   },
   usageStats: {
     title: '사용량',

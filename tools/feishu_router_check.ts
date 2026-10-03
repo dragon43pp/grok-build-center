@@ -55,6 +55,9 @@ function check(name: string, ok: boolean, extra = ''): void {
   check('不是斜杠开头 → unknown', parseCommand('你好').cmd === 'unknown')
   check('/瞎写 → unknown', parseCommand('/瞎写').cmd === 'unknown')
   check('/继续 0 → unknown', parseCommand('/继续 0').cmd === 'unknown')
+  check('/打开', parseCommand('/打开').cmd === 'open-workbuddy')
+  check('/open', parseCommand('/open').cmd === 'open-workbuddy')
+  check('/打开 不带序号也认', parseCommand('/打开 1').cmd === 'open-workbuddy')
 }
 
 // ------------------------------------------------------------------ 假件
@@ -94,11 +97,13 @@ interface Deps {
   pollTimeoutMs?: number
   /** 第 N 次 listActive 之后终端才算就绪（模拟 CLI 启动耗时）。 */
   listReadyAfterCalls?: number
+  /** 接上之后 /打开 和列表按钮才会去开国内 WorkBuddy。 */
+  openLatestWorkbuddyImpl?: () => Promise<{ ok: boolean; message: string }>
 }
 
 function makeFixture(deps: Deps = {}) {
   const sent: Array<{ openId: string; message: Record<string, unknown> }> = []
-  const calls = { history: 0, listActive: 0, resume: 0, send: 0 }
+  const calls = { history: 0, listActive: 0, resume: 0, send: 0, openWorkbuddy: 0 }
   const resumeArgs: Array<{ sid: string; agent?: string; model?: string }> = []
   const router = createFeishuRouter({
     history: async () => {
@@ -147,7 +152,15 @@ function makeFixture(deps: Deps = {}) {
     },
     isPaired: (openId) => (deps.paired ?? ['ou_me']).includes(openId),
     pollIntervalMs: deps.pollIntervalMs,
-    pollTimeoutMs: deps.pollTimeoutMs
+    pollTimeoutMs: deps.pollTimeoutMs,
+    ...(deps.openLatestWorkbuddyImpl
+      ? {
+          openLatestWorkbuddy: async () => {
+            calls.openWorkbuddy += 1
+            return deps.openLatestWorkbuddyImpl!()
+          }
+        }
+      : {})
   })
 
   const message = (overrides: Partial<FeishuInboundMessage> = {}): FeishuInboundMessage => ({
@@ -213,6 +226,7 @@ function makeCardActionFor(value: Record<string, unknown>, openId = 'ou_me'): Fe
   const header = (card as { header?: { title?: { content?: string } } }).header
   check('/帮助 回的是卡片', Boolean(header?.title?.content))
   check('/帮助 卡里写了 /列表', JSON.stringify(card).includes('/列表'))
+  check('/帮助 卡里写了 /打开', JSON.stringify(card).includes('/打开'))
 
   await router.onMessage(message({ text: '/列表' }))
   const listCard = lastCard() as {
@@ -221,13 +235,15 @@ function makeCardActionFor(value: Record<string, unknown>, openId = 'ou_me'): Fe
   }
   check('/列表 卡片头带数量', listCard.header?.title?.content?.includes('2') === true)
   const buttons = listCard.elements?.flatMap((el) => el.actions ?? []) ?? []
-  check('/列表 有两个序号按钮', buttons.length === 2, String(buttons.length))
+  const pickButtons = buttons.filter((button) => button.value?.['cmd'] === 'pick')
+  check('/列表 有两个序号按钮', pickButtons.length === 2, String(pickButtons.length))
   check(
     '按钮 value 带 sid+agent+title',
-    buttons[0]?.value?.['sid'] === 'ses-1' &&
-      buttons[0]?.value?.['agent'] === 'grok' &&
-      typeof buttons[0]?.value?.['title'] === 'string'
+    pickButtons[0]?.value?.['sid'] === 'ses-1' &&
+      pickButtons[0]?.value?.['agent'] === 'grok' &&
+      typeof pickButtons[0]?.value?.['title'] === 'string'
   )
+  check('没接打开器时列表不放 WorkBuddy 按钮', !buttons.some((button) => button.value?.['cmd'] === 'open-workbuddy'))
 
   await router.onMessage(message({ text: '/继续 2' }))
   check('/继续 2 回复带 ✅', lastText().includes('✅'), lastText())
@@ -450,6 +466,74 @@ function makeCardActionFor(value: Record<string, unknown>, openId = 'ou_me'): Fe
   check('history 炸了：回复失败原因而不是沉默', lastText().length > 0, lastText())
   await router.onMessage(message({ text: '随便聊一句' }))
   check('普通闲聊：引导 /帮助', lastText().includes('/帮助'))
+}
+
+// ------------------------------------------------------------------ 国内 WorkBuddy：只开最近一场
+
+{
+  const { router, message, calls, lastText } = makeFixture()
+  await router.onMessage(message({ text: '/打开' }))
+  check('没接打开器：/打开 说明原因', lastText().includes('打开器'), lastText())
+  check('没接打开器：不调用 resume', calls.resume === 0, String(calls.resume))
+}
+
+{
+  const opened = makeFixture({
+    openLatestWorkbuddyImpl: async () => ({ ok: true, message: '已在 WorkBuddy 里打开「上次那场」。' })
+  })
+  await opened.router.onMessage(opened.message({ text: '/打开' }))
+  check('/打开 成功：调用打开器', opened.calls.openWorkbuddy === 1, String(opened.calls.openWorkbuddy))
+  check('/打开 成功：回复 ✅', opened.lastText().includes('✅'), opened.lastText())
+  check('/打开 成功：不走终端投喂', opened.lastText().includes('不会自动发消息'))
+  check('/打开 成功：resume 与 send 都是 0', opened.calls.resume === 0 && opened.calls.send === 0)
+
+  await opened.router.onMessage(opened.message({ text: '/列表' }))
+  const listCard = opened.lastCard() as {
+    elements?: Array<{ tag?: string; actions?: Array<{ value?: Record<string, unknown> }> }>
+  }
+  const buttons = listCard.elements?.flatMap((el) => el.actions ?? []) ?? []
+  const pickButtons = buttons.filter((button) => button.value?.['cmd'] === 'pick')
+  const openButtons = buttons.filter((button) => button.value?.['cmd'] === 'open-workbuddy')
+  check('接上后列表仍是两个序号按钮', pickButtons.length === 2, String(pickButtons.length))
+  check('接上后列表有打开上次的 WorkBuddy', openButtons.length === 1, String(openButtons.length))
+
+  const toast = await opened.router.onCardAction(opened.cardAction({ cmd: 'open-workbuddy' })) as {
+    toast?: { type?: string }
+  }
+  check('按钮打开：toast success', toast?.toast?.type === 'success')
+  check('按钮打开：不调用 resume', opened.calls.resume === 0, String(opened.calls.resume))
+  check('按钮打开：不调用 send', opened.calls.send === 0, String(opened.calls.send))
+  check('按钮打开：打开器被再调一次', opened.calls.openWorkbuddy === 2, String(opened.calls.openWorkbuddy))
+}
+
+{
+  const failed = makeFixture({
+    openLatestWorkbuddyImpl: async () => ({ ok: false, message: '这台电脑上还没有国内 WorkBuddy 会话。' })
+  })
+  await failed.router.onMessage(failed.message({ text: '/open' }))
+  check('/open 失败：❌ + 原因', failed.lastText().includes('❌') && failed.lastText().includes('还没有'), failed.lastText())
+  check('/open 失败：不调用 resume', failed.calls.resume === 0)
+}
+
+{
+  const exploded = makeFixture({
+    openLatestWorkbuddyImpl: async () => {
+      throw new Error('protocol missing')
+    }
+  })
+  await exploded.router.onMessage(exploded.message({ text: '/打开' }))
+  check('/打开 抛错：折成人话', exploded.lastText().includes('❌') && exploded.lastText().includes('protocol missing'), exploded.lastText())
+}
+
+{
+  const empty = makeFixture({
+    historyImpl: async () => [],
+    openLatestWorkbuddyImpl: async () => ({ ok: true, message: '已打开。' })
+  })
+  await empty.router.onMessage(empty.message({ text: '/列表' }))
+  const card = JSON.stringify(empty.lastCard())
+  check('没有终端会话时仍给出 WorkBuddy 按钮', card.includes('open-workbuddy'), card)
+  check('没有终端会话时不说先去跑几场就结束', !empty.lastText().includes('先在桌面端跑几场'))
 }
 
 console.log(`\n通过 ${pass} · 失败 ${fail}`)

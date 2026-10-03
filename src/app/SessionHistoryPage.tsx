@@ -81,13 +81,35 @@ export default function SessionHistoryPage({ clis, onResumeSession }: SessionHis
   const hideKeys = useSessionOpsStore((state) => state.hide)
   const unhideAll = useSessionOpsStore((state) => state.clearHidden)
 
+  const sessions = useMemo(() => result?.sessions ?? [], [result])
+
+  /** 全部国内 WorkBuddy 里最近的一场。筛选和隐藏不会把更旧的一场顶上来。 */
+  const latestWorkbuddyId = useMemo(() => {
+    const latest = sortSessions(sessions).find(
+      (session) => session.agent === 'workbuddy' && !session.subagent && !session.archived
+    )
+    return latest?.id ?? null
+  }, [sessions])
+
   /**
-   * 会话 → 能不能恢复、为什么不能。三类条件各查各的：
-   * 会话本身（纯函数 planResume）、CLI 装没装（启动扫描）、有没有安装项。
+   * 会话 → 能不能恢复、为什么不能。
+   * CLI 看 planResume、安装扫描和有没有安装项。
+   * WorkBuddy 不走这条：只有最近一场国内会话能在客户端里打开。
    * 理由要拼成人话塞进 title，否则用户只能看到一个不明所以的灰按钮。
    */
   const resumeAffordance = useCallback(
-    (session: HistorySession): { option: LaunchableCli | null; blocked: string | null } => {
+    (session: HistorySession): {
+      option: LaunchableCli | null
+      blocked: string | null
+      workbuddy: boolean
+    } => {
+      // WorkBuddy 不走 CLI。只有最近一场能在客户端里打开。
+      if (session.agent === 'workbuddy') {
+        if (session.id === latestWorkbuddyId) {
+          return { option: null, blocked: null, workbuddy: true }
+        }
+        return { option: null, blocked: t.openWorkbuddyNotLatest, workbuddy: false }
+      }
       const plan = planResume(session)
       if (!plan.ok) {
         const blocked =
@@ -96,15 +118,19 @@ export default function SessionHistoryPage({ clis, onResumeSession }: SessionHis
             : plan.blocker === 'no-session-id'
               ? t.resumeBlockedNoId
               : t.resumeBlockedUnverified
-        return { option: null, blocked }
+        return { option: null, blocked, workbuddy: false }
       }
       const option = clis.find((candidate) => candidate.definition.id === plan.cliId) ?? null
       if (!option || option.installations.length === 0) {
-        return { option: null, blocked: t.resumeBlockedCliMissing(getAdapterName(session.agent)) }
+        return {
+          option: null,
+          blocked: t.resumeBlockedCliMissing(getAdapterName(session.agent)),
+          workbuddy: false
+        }
       }
-      return { option, blocked: null }
+      return { option, blocked: null, workbuddy: false }
     },
-    [clis, t]
+    [clis, latestWorkbuddyId, t]
   )
 
   const handleResume = useCallback(
@@ -120,7 +146,24 @@ export default function SessionHistoryPage({ clis, onResumeSession }: SessionHis
     [onResumeSession, t]
   )
 
-  const sessions = useMemo(() => result?.sessions ?? [], [result])
+  const handleOpenWorkbuddy = useCallback(
+    (session: HistorySession): void => {
+      if (session.id !== latestWorkbuddyId) return
+      setResumingId(session.id)
+      setResumeError(null)
+      void window.sessionsApi
+        .openWorkbuddy({ id: session.id })
+        .then((result) => {
+          if (!result.ok) setResumeError(t.openWorkbuddyFailed(result.message))
+        })
+        .catch((error: unknown) => {
+          const reason = error instanceof Error ? error.message : String(error)
+          setResumeError(t.openWorkbuddyFailed(reason))
+        })
+        .finally(() => setResumingId(null))
+    },
+    [latestWorkbuddyId, t]
+  )
 
   /** 行 key，与 AI 返回的 sessionKeys、墓碑 store 同构。 */
   const keyOf = useCallback(
@@ -582,6 +625,7 @@ export default function SessionHistoryPage({ clis, onResumeSession }: SessionHis
                 trashing={trashingKey === key}
                 onTrash={trashable(session) ? trashSession : null}
                 onResume={handleResume}
+                onOpenWorkbuddy={handleOpenWorkbuddy}
               />
               )
             })}</ul>
@@ -604,10 +648,11 @@ function SessionRow({
   highlighted,
   trashing,
   onTrash,
-  onResume
+  onResume,
+  onOpenWorkbuddy
 }: {
   session: HistorySession
-  affordance: { option: LaunchableCli | null; blocked: string | null }
+  affordance: { option: LaunchableCli | null; blocked: string | null; workbuddy: boolean }
   resuming: boolean
   /** AI 查找命中：左侧 2px 珊瑚条 + 标题点亮。 */
   highlighted: boolean
@@ -615,6 +660,7 @@ function SessionRow({
   /** null = 这种存储不能整场删除（db / 合成路径），不出按钮。 */
   onTrash: ((session: HistorySession) => void) | null
   onResume: (session: HistorySession, option: LaunchableCli) => void
+  onOpenWorkbuddy: (session: HistorySession) => void
 }) {
   const strings = useStrings()
   const t = strings.sessionHistory
@@ -629,17 +675,23 @@ function SessionRow({
           : t.costNone
 
   const option = affordance.option
-  const canResume = Boolean(option) && !resuming
+  const openWorkbuddy = affordance.workbuddy
+  const canResume = (Boolean(option) || openWorkbuddy) && !resuming
   const actionLabel = resuming
-    ? t.resuming
-    : (affordance.blocked ?? `${t.resume} · ${t.resumeHint}`)
+    ? openWorkbuddy
+      ? t.openingWorkbuddy
+      : t.resuming
+    : openWorkbuddy
+      ? `${t.openWorkbuddy} · ${t.openWorkbuddyHint}`
+      : (affordance.blocked ?? `${t.resume} · ${t.resumeHint}`)
 
   return (
     <li
       data-testid="session-history-row"
       data-agent={session.agent}
       data-subagent={session.subagent ? 'true' : 'false'}
-      data-resumable={option ? 'true' : 'false'}
+      data-resumable={option || openWorkbuddy ? 'true' : 'false'}
+      data-workbuddy-open={openWorkbuddy ? 'true' : 'false'}
       // 行里只显示 cwd 的**基名**（`baseName(session.cwd)`），完整路径在 DOM 里
       // 根本没露面。而「恢复时预填的是不是这条会话自己的老目录」恰好只能靠完整
       // 路径判死 —— 比基名会漏（同名目录就算过）。所以这里把原值挂出来，
@@ -649,7 +701,8 @@ function SessionRow({
       // 双击整行 = 点「继续」；不能恢复的行不做任何反应，免得误触后
       // 看起来像卡住了。
       onDoubleClick={() => {
-        if (option) onResume(session, option)
+        if (openWorkbuddy) onOpenWorkbuddy(session)
+        else if (option) onResume(session, option)
       }}
       className={`group relative cursor-target flex items-center gap-3 rounded-md px-2 py-1.5 transition-colors hover:bg-surface-hover ${
         highlighted ? 'bg-surface' : ''
@@ -725,7 +778,8 @@ function SessionRow({
           disabled={!canResume}
           onClick={(event) => {
             event.stopPropagation()
-            if (option) onResume(session, option)
+            if (openWorkbuddy) onOpenWorkbuddy(session)
+            else if (option) onResume(session, option)
           }}
           className={`flex size-5 items-center justify-center rounded transition-opacity ${
             canResume

@@ -1,10 +1,13 @@
 /**
  * WorkBuddy —— 本机 GUI 会话记录（`~/.workbuddy/workbuddy.db` 的 `sessions` 表）。
  *
- * WorkBuddy 不是 CLI：它的会话没有终端可恢复（`workbuddy://` 协议注册是个
- * 空壳——只有 URL Protocol，没有 shell/open/command），所以这里的会话
- * **永远 resumable=false**，由 `planResume` 的 no-resume-command 兜底，
- * 历史页会如实标「这个 CLI 的恢复命令本机没实测过」。这是能力边界，不是缺陷。
+ * WorkBuddy 不是 CLI。终端恢复命令不存在，`planResume` 仍返回
+ * no-resume-command，桥接层的 resumable 保持 false，飞书 /继续 不会把它
+ * 当成终端会话。
+ *
+ * 国内客户端注册了 `workbuddy://chat/<id>`。桌面历史页和飞书 /打开 只对
+ * 最近一场走这条链接（`shell.openExternal`），不开国际版 `workbuddy-ai://`。
+ * 下面的 `path` 仍是 `workbuddy://<id>` 标识，不是可点击的深链。
  *
  * 数据形状（2026-10-01 实测，1890 行）：
  *   - `sessions`：id / cwd / title / status / created_at / updated_at（毫秒）/

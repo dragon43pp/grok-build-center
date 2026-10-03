@@ -8,6 +8,7 @@
  *
  *   /列表            最近可恢复的历史会话（卡片，带按钮）
  *   /继续 <序号>      在电脑上打开那场会话 —— 手机做决定，电脑接着聊
+ *   /打开            打开上次的国内 WorkBuddy 会话（不选模型、不投喂）
  *   /会话            现在开着的会话
  *   /发 <序号> <文字>  往开着的会话里投喂一句话
  *   /帮助            用法
@@ -64,6 +65,11 @@ export interface FeishuRouterDeps {
   sendTo: (openId: string, message: FeishuOutboundMessage) => Promise<unknown>
   /** 准入名单判定。不在名单里的人发什么都不理。 */
   isPaired: (openId: string) => boolean
+  /**
+   * 打开上次的国内 WorkBuddy 会话。不走终端、不选模型、不投喂。
+   * 没接上时 /打开 会说明，列表卡也不放这个按钮。
+   */
+  openLatestWorkbuddy?: () => Promise<{ ok: boolean; message: string }>
   /** 「恢复后自动投喂」的轮询节奏，判卷用小值。默认 3 秒一次、最多等 45 秒。 */
   pollIntervalMs?: number
   pollTimeoutMs?: number
@@ -77,6 +83,7 @@ export type RouterCommand =
   | { cmd: 'active' }
   | { cmd: 'resume'; n: number; text?: string }
   | { cmd: 'send'; n: number; text: string }
+  | { cmd: 'open-workbuddy' }
   | { cmd: 'unknown' }
 
 export function parseCommand(rawText: string): RouterCommand {
@@ -90,6 +97,7 @@ export function parseCommand(rawText: string): RouterCommand {
   if (word === '帮助' || word === 'help') return { cmd: 'help' }
   if (word === '列表' || word === 'list') return { cmd: 'list' }
   if (word === '会话' || word === 'sessions') return { cmd: 'active' }
+  if (word === '打开' || word === 'open') return { cmd: 'open-workbuddy' }
   if (word === '继续' || word === 'resume') {
     if (!hasN) return { cmd: 'unknown' }
     // 序号后面还跟着字 = 恢复之后把这句话自动投喂给 CLI（一步到位）。
@@ -212,6 +220,7 @@ function helpCard(): Record<string, unknown> {
           content: [
             '**/列表** —— 最近可恢复的历史会话（点序号 → 选模型 → 打开）',
             '**/继续 序号 [第一句话]** —— 打开会话；带上话就自动投喂，它直接开跑',
+            '**/打开** —— 在电脑上打开上次的国内 WorkBuddy 会话（不选模型，不自动发消息）',
             '**/会话** —— 现在开着的会话',
             '**/发 序号 一句话** —— 往开着的会话里投喂一句话'
           ].join('\n')
@@ -224,6 +233,7 @@ function helpCard(): Record<string, unknown> {
           content: [
             '**能力边界**',
             '- 「继续」是在电脑上开标签页：手机上做决定，回到电脑就能接着聊',
+            '- 「打开」只开国内 WorkBuddy 里最近一场，国际版不在这里恢复',
             '- 「发」只对**开着的**会话生效；会话正忙时不收',
             '- 列表序号 30 分钟内有效，过期重发 /列表'
           ].join('\n')
@@ -274,10 +284,41 @@ export function createFeishuRouter(deps: FeishuRouterDeps): {
     await deps.sendTo(openId, { text })
   }
 
+  const workbuddyButton = deps.openLatestWorkbuddy
+    ? {
+        tag: 'button',
+        text: { tag: 'plain_text', content: '打开上次的 WorkBuddy' },
+        type: 'default',
+        value: { cmd: 'open-workbuddy' }
+      }
+    : null
+
   async function sendList(openId: string): Promise<void> {
     const resumable = (await deps.history()).filter((session) => session.resumable)
     if (resumable.length === 0) {
-      await sendText(openId, '这台电脑上还没有可恢复的会话。先在桌面端跑几场再来。')
+      if (!workbuddyButton) {
+        await sendText(openId, '这台电脑上还没有可恢复的会话。先在桌面端跑几场再来。')
+        return
+      }
+      await deps.sendTo(openId, {
+        card: {
+          config: { wide_screen_mode: true },
+          header: {
+            template: 'blue',
+            title: { tag: 'plain_text', content: '没有可在终端恢复的会话' }
+          },
+          elements: [
+            {
+              tag: 'div',
+              text: {
+                tag: 'lark_md',
+                content: '终端会话还没有。国内 WorkBuddy 可以打开上次那场。'
+              }
+            },
+            { tag: 'action', actions: [workbuddyButton] }
+          ]
+        }
+      })
       return
     }
     const top = resumable.slice(0, 10)
@@ -310,10 +351,16 @@ export function createFeishuRouter(deps: FeishuRouterDeps): {
         elements: [
           { tag: 'div', text: { tag: 'lark_md', content: lines.join('\n') } },
           ...grouped.map((group) => ({ tag: 'action', actions: group })),
+          ...(workbuddyButton ? [{ tag: 'action', actions: [workbuddyButton] }] : []),
           {
             tag: 'note',
             elements: [
-              { tag: 'plain_text', content: '点序号选模型，选完在电脑上打开；序号 30 分钟内有效' }
+              {
+                tag: 'plain_text',
+                content: workbuddyButton
+                  ? '点序号选模型，选完在电脑上打开；「打开上次的 WorkBuddy」不选模型。序号 30 分钟内有效'
+                  : '点序号选模型，选完在电脑上打开；序号 30 分钟内有效'
+              }
             ]
           }
         ]
@@ -422,6 +469,19 @@ export function createFeishuRouter(deps: FeishuRouterDeps): {
     }
   }
 
+  async function openLatestWorkbuddyText(): Promise<string> {
+    if (!deps.openLatestWorkbuddy) {
+      return '这台电脑还没接上国内 WorkBuddy 的打开器。'
+    }
+    try {
+      const result = await deps.openLatestWorkbuddy()
+      if (!result.ok) return `❌ ${result.message}`
+      return `✅ ${result.message}\n这场不经过终端，也不会自动发消息。`
+    } catch (error) {
+      return `❌ 没开成：${messageOf(error)}`
+    }
+  }
+
   async function doSend(openId: string, n: number, text: string): Promise<string> {
     let items = cacheGet(activeCache, openId)
     if (!items) {
@@ -474,6 +534,9 @@ export function createFeishuRouter(deps: FeishuRouterDeps): {
             return
           case 'active':
             await sendActiveList(message.openId)
+            return
+          case 'open-workbuddy':
+            await sendText(message.openId, await openLatestWorkbuddyText())
             return
           case 'resume':
             await sendText(
@@ -529,6 +592,25 @@ export function createFeishuRouter(deps: FeishuRouterDeps): {
             `✅ 已在电脑上打开「${truncate(title, 40)}」${model ? `（模型 ${model}）` : ''}，回去就能接着聊。`
           )
           return { toast: { type: 'success', content: '已在电脑上打开' } }
+        }
+        if (value['cmd'] === 'open-workbuddy') {
+          if (!deps.openLatestWorkbuddy) {
+            await sendText(action.openId, '这台电脑还没接上国内 WorkBuddy 的打开器。')
+            return { toast: { type: 'error', content: '没有 WorkBuddy 打开器' } }
+          }
+          const result = await deps.openLatestWorkbuddy()
+          await sendText(
+            action.openId,
+            result.ok
+              ? `✅ ${result.message}\n这场不经过终端，也不会自动发消息。`
+              : `❌ ${result.message}`
+          )
+          return {
+            toast: {
+              type: result.ok ? 'success' : 'error',
+              content: result.ok ? '已在 WorkBuddy 里打开' : truncate(result.message, 60)
+            }
+          }
         }
         if (value['cmd'] === 'list') {
           await sendList(action.openId)

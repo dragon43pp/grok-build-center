@@ -40,6 +40,7 @@ import {
   type SessionsDiscoverRequest,
   type SpawnOptions
 } from '../shared/ipc-contract'
+import { openDomesticWorkbuddy } from './sessions/open-workbuddy'
 import { AgentInvokeChannel } from '../shared/agent-events'
 import type { StartAgentSession } from '../shared/agent-events'
 import type { AgentSessionRuntime } from './agents/AgentSessionRuntime'
@@ -795,6 +796,28 @@ export function registerIpc(manager: PTYManager, ctx: IpcContext): void {
           message: error instanceof Error ? error.message : String(error)
         }
       }
+    }
+  )
+
+  /**
+   * 打开国内 WorkBuddy 最近一场（或指定的一场）。只对主窗口开放。
+   * 真正的协议拉起在 openDomesticWorkbuddy，这里只校验入参形状。
+   */
+  ipcMain.handle(
+    SessionsInvokeChannel.OpenWorkbuddy,
+    async (event, payload: unknown) => {
+      requireMainWindow(event, ctx)
+      if (payload === undefined || payload === null) {
+        return openDomesticWorkbuddy()
+      }
+      if (typeof payload !== 'object') {
+        return { ok: false, message: '参数不完整' }
+      }
+      const raw = (payload as { id?: unknown }).id
+      if (raw !== undefined && typeof raw !== 'string') {
+        return { ok: false, message: '会话 id 不合法。' }
+      }
+      return openDomesticWorkbuddy(raw)
     }
   )
 

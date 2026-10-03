@@ -322,7 +322,13 @@ export const SessionsInvokeChannel = {
    * id+path 确实是扫描结果里的一场，才执行 shell.trashItem —— 防止渲染进程
    * 借这条通道删任意路径。db 型存储（workbuddy）与合成路径（opencode）拒绝。
    */
-  TrashSession: 'sessions:trash-session'
+  TrashSession: 'sessions:trash-session',
+  /**
+   * 在国内 WorkBuddy 里打开一场会话（`workbuddy://chat/<id>`）。
+   * 省略 id 打开最近一场；给出 id 时必须仍在国内库的未删除记录里。
+   * 不开国际版，也不走 CLI 的 planResume。
+   */
+  OpenWorkbuddy: 'sessions:open-workbuddy'
 } as const
 
 export interface SessionsTrashRequest {
@@ -334,6 +340,18 @@ export interface SessionsTrashRequest {
 export interface SessionsTrashResult {
   ok: boolean
   message?: string
+}
+
+export interface SessionsOpenWorkbuddyRequest {
+  /** 省略则打开国内库里最近一场。给出则必须是未删除的国内会话。 */
+  id?: string
+}
+
+export interface SessionsOpenWorkbuddyResult {
+  ok: boolean
+  message: string
+  sessionId?: string
+  title?: string
 }
 
 export interface SessionsDiscoverRequest {
@@ -354,6 +372,10 @@ export interface SessionsApi {
   refreshPricing: () => Promise<PricingRefreshResult>
   /** 把一场会话移入系统回收站。主进程核对后才执行，见 TrashSession 注释。 */
   trash: (request: SessionsTrashRequest) => Promise<SessionsTrashResult>
+  /** 在国内 WorkBuddy 里打开最近一场，或打开一条仍存在的国内会话。 */
+  openWorkbuddy: (
+    request?: SessionsOpenWorkbuddyRequest
+  ) => Promise<SessionsOpenWorkbuddyResult>
 }
 
 export type RecordEventInput = Pick<

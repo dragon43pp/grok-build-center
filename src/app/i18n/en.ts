@@ -109,7 +109,12 @@ export const en = {
     resumeBlockedUnverified:
       "This CLI's resume command has not been verified on this machine, so it is not offered",
     resumeBlockedCliMissing: (name: string) =>
-      `${name} was not detected on this machine; install it and rescan to resume`
+      `${name} was not detected on this machine; install it and rescan to resume`,
+    openWorkbuddy: 'Open in WorkBuddy',
+    openingWorkbuddy: 'Opening…',
+    openWorkbuddyHint: 'Open the last domestic WorkBuddy session',
+    openWorkbuddyFailed: (reason: string) => `Could not open: ${reason}`,
+    openWorkbuddyNotLatest: 'Only the most recent domestic WorkBuddy session can be opened'
   },
   usageStats: {
     title: 'Usage',
