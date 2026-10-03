@@ -21,6 +21,8 @@
 
 **Grok Build Center** — short for **Harness Rack** — is a desktop terminal for multi-agent coding workflows. It keeps every CLI's native TUI intact, then adds the layer that is usually missing around it: session status, attention cues, a floating monitor, quick launch, and a read-only workspace viewer.
 
+The desktop app is the repository root. The Python session tools and Feishu helper are the same product, in [`hub/`](./hub).
+
 <div align="center">
   <img src="./assets/readme/home-launcher.png" width="1100" alt="Grok Build Center home screen with detected coding CLIs">
 </div>

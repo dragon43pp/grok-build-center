@@ -21,6 +21,8 @@
 
 **Grok Build Center**（**Harness Rack**）是一个面向多 Coding Agent 工作流的桌面终端。它保留每个 CLI 原本的 TUI，在外层补上会话状态、注意力提醒、悬浮监控、快速启动和只读工作区浏览。
 
+桌面程序在仓库根目录。Python 会话工具和飞书助手是同一套产品，在 [`hub/`](./hub)。
+
 <div align="center">
   <img src="./assets/readme/home-launcher.png" width="1100" alt="Grok Build Center 首页与扫描到的 Coding CLI">
 </div>

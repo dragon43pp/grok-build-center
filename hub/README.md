@@ -5,6 +5,7 @@
 <h1 align="center">Grok Build Center</h1>
 
 <p align="center">
+  <b>这部分在仓库的 <code>hub/</code>。桌面程序在仓库根目录，是同一个 Grok Build Center。</b><br>
   <b>Grok Build 会话管理中心 —— 卡住了它主动找你，几百场旧会话也找得回、接得上。</b><br>
   跨项目索引 · 分叉与接续继承 · 带代码漂移检测的恢复。<br>
   哪个会话在等你确认，一眼看到；手机上也能当场放行。
@@ -207,7 +208,7 @@ python -m feishu_hub.scan --out session-history.html  :: 全文检索页
 
 ```cmd
 git clone https://github.com/dragon43pp/grok-build-center.git
-cd grok-build-center
+cd grok-build-center\hub
 pip install -r requirements.txt
 
 python tools\setup.py        :: 向导：验凭证 → 建多维表格 → 拿 open_id → 写 config.json
