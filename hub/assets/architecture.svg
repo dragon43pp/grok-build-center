@@ -1,0 +1,94 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 356" width="880" height="356" role="img" aria-label="Grok Build Center architecture">
+  <title>Grok Build Center data flow</title>
+  <style>
+    .bg    { fill: #0B0E13; }
+    .box   { fill: #12171F; stroke: #232B36; stroke-width: 1; }
+    .core  { fill: #1A1520; stroke: #FF6B4A; stroke-width: 1.5; }
+    .t     { fill: #E8EBF0; }
+    .d     { fill: #8A93A3; }
+    .f     { fill: #5E6675; }
+    .k     { fill: #FF6B4A; }
+    .arr   { stroke: #313A47; stroke-width: 1.4; fill: none; }
+    .cap   { fill: #5E6675; }
+    .hair  { fill: #202834; }
+    @media (prefers-color-scheme: light) {
+      .bg    { fill: #F5F7FA; }
+      .box   { fill: #FFFFFF; stroke: #DCE2EC; }
+      .core  { fill: #FFF4F0; stroke: #E5533A; }
+      .t     { fill: #0F1420; }
+      .d     { fill: #626C7D; }
+      .f     { fill: #98A1B0; }
+      .k     { fill: #C8452A; }
+      .arr   { stroke: #B4BECD; }
+      .cap   { fill: #8A93A3; }
+      .hair  { fill: #E4E9F1; }
+    }
+  </style>
+
+  <rect class="bg" width="880" height="356" rx="14"/>
+
+  <g font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace"
+     font-size="11" letter-spacing="1.4" class="cap">
+    <text x="32"  y="24">SOURCES</text>
+    <text x="316" y="24">CORE</text>
+    <text x="580" y="24">SINKS</text>
+  </g>
+
+  <g>
+    <rect class="box" x="32" y="36"  width="236" height="54" rx="10"/>
+    <text x="48" y="60" font-family="ui-sans-serif, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif" font-size="14" font-weight="600" class="t">CLI Hooks</text>
+    <text x="48" y="78" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11.5" class="d">grok / codex / claude 内置 hook</text>
+
+    <rect class="box" x="32" y="102" width="236" height="54" rx="10"/>
+    <text x="48" y="126" font-family="ui-sans-serif, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif" font-size="14" font-weight="600" class="t">外部事件流</text>
+    <text x="48" y="144" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11.5" class="d">events.jsonl + Bridge 管道</text>
+
+    <rect class="box" x="32" y="168" width="236" height="54" rx="10"/>
+    <text x="48" y="192" font-family="ui-sans-serif, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif" font-size="14" font-weight="600" class="t">进程扫描</text>
+    <text x="48" y="210" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11.5" class="d">psutil: 谁还活着、cwd 在哪</text>
+
+    <rect class="box" x="32" y="234" width="236" height="54" rx="10"/>
+    <text x="48" y="258" font-family="ui-sans-serif, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif" font-size="14" font-weight="600" class="t">会话历史文件</text>
+    <text x="48" y="276" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11.5" class="d">~/.grok / ~/.codex / ~/.claude</text>
+  </g>
+
+  <rect class="core" x="316" y="122" width="216" height="98" rx="12"/>
+  <text x="424" y="158" text-anchor="middle"
+        font-family="ui-sans-serif, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif" font-size="17" font-weight="700" class="k">state.py</text>
+  <text x="424" y="180" text-anchor="middle" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11.5" class="d">归一化 · 判状态 · 去重</text>
+  <text x="424" y="200" text-anchor="middle" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11.5" class="d">生成 Snapshot</text>
+
+  <g>
+    <rect class="box" x="580" y="36"  width="268" height="54" rx="10"/>
+    <text x="596" y="60" font-family="ui-sans-serif, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif" font-size="14" font-weight="600" class="t">终端面板</text>
+    <text x="596" y="78" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11.5" class="d">不连飞书也能用，先看本机</text>
+
+    <rect class="box" x="580" y="102" width="268" height="54" rx="10"/>
+    <text x="596" y="126" font-family="ui-sans-serif, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif" font-size="14" font-weight="600" class="t">飞书卡片</text>
+    <text x="596" y="144" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11.5" class="d">手机上收到「等你确认」→ 批准</text>
+
+    <rect class="box" x="580" y="168" width="268" height="54" rx="10"/>
+    <text x="596" y="192" font-family="ui-sans-serif, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif" font-size="14" font-weight="600" class="t">飞书多维表格</text>
+    <text x="596" y="210" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11.5" class="d">全部会话，可查可筛可分享</text>
+
+    <rect class="box" x="580" y="234" width="268" height="54" rx="10"/>
+    <text x="596" y="258" font-family="ui-sans-serif, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif" font-size="14" font-weight="600" class="t">离线 HTML 报告</text>
+    <text x="596" y="276" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11.5" class="d">一键导出，发给别人看</text>
+  </g>
+
+  <g class="arr">
+    <path d="M268 63  H316"/>
+    <path d="M268 129 H316"/>
+    <path d="M268 195 H316"/>
+    <path d="M268 261 H316"/>
+    <path d="M532 171 H580"/>
+    <path d="M532 171 V63  H580"/>
+    <path d="M532 171 V129 H580"/>
+    <path d="M532 171 V261 H580"/>
+  </g>
+
+  <rect class="hair" x="32" y="306" width="816" height="1"/>
+  <text x="32" y="330" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="12" class="d">状态优先级：</text>
+  <text x="140" y="330" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="12" class="k">hook</text>
+  <text x="184" y="330" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="12" class="d">&gt; 事件流 &gt; 进程 &gt; 文件 mtime　—— 越靠前越可信，不会互相覆盖</text>
+</svg>

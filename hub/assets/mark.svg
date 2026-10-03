@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48" role="img" aria-label="Grok Build Center">
+  <title>Grok Build Center mark</title>
+  <defs>
+    <radialGradient id="mglow">
+      <stop offset="0%"   stop-color="#FF6B4A" stop-opacity="0.55"/>
+      <stop offset="100%" stop-color="#FF6B4A" stop-opacity="0"/>
+    </radialGradient>
+    <style>
+      .plate { fill: #141922; }
+      .hair  { fill: none; stroke: #242C38; stroke-width: 1; }
+      .slot  { fill: #3A4453; }
+      .slotH { fill: #5C6880; }
+      .off   { fill: #39424F; }
+      @media (prefers-color-scheme: light) {
+        .plate { fill: #EDF0F5; }
+        .hair  { stroke: #D8DEE8; }
+        .slot  { fill: #C3CBD8; }
+        .slotH { fill: #A6B0C1; }
+        .off   { fill: #B8C1CE; }
+      }
+    </style>
+  </defs>
+
+  <rect class="plate" x="3.5" y="3.5" width="41" height="41" rx="11"/>
+  <rect class="hair"  x="3.5" y="3.5" width="41" height="41" rx="11"/>
+
+  <!-- lit slot -->
+  <rect class="slotH" x="10" y="11" width="18" height="5" rx="2.5"/>
+  <circle cx="36" cy="13.5" r="7"   fill="url(#mglow)"/>
+  <circle cx="36" cy="13.5" r="4"   fill="#FF6B4A"/>
+
+  <!-- dormant slots -->
+  <rect class="slot" x="10" y="21.5" width="18" height="5" rx="2.5"/>
+  <circle class="off" cx="36" cy="24" r="3.2"/>
+
+  <rect class="slot" x="10" y="32" width="18" height="5" rx="2.5"/>
+  <circle class="off" cx="36" cy="34.5" r="3.2"/>
+</svg>

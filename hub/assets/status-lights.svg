@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 660 276" width="660" height="276" role="img" aria-label="Grok Build Center status lights">
+  <title>Grok Build Center status lights</title>
+  <defs>
+    <radialGradient id="sglow">
+      <stop offset="0%"   stop-color="#FF6B4A" stop-opacity="0.55"/>
+      <stop offset="100%" stop-color="#FF6B4A" stop-opacity="0"/>
+    </radialGradient>
+    <style>
+      .bg    { fill: #0B0E13; }
+      .row   { fill: #141922; }
+      .ink   { fill: #E8EBF0; }
+      .lit   { fill: #FF8A6E; }
+      .dim   { fill: #8A93A3; }
+      .faint { fill: #5E6675; }
+      .hair  { fill: #202834; }
+      .amber   { fill: #F2A93B; }
+      .coral   { fill: #FF6B4A; }
+      .mint    { fill: #3ECF8E; }
+      .crimson { fill: #EF4E45; }
+      .slate   { fill: #6B7484; }
+      .sky     { fill: #4C9AFF; }
+      @media (prefers-color-scheme: light) {
+        .bg    { fill: #F5F7FA; }
+        .row   { fill: #FFFFFF; }
+        .ink   { fill: #0F1420; }
+        .lit   { fill: #C8452A; }
+        .dim   { fill: #626C7D; }
+        .faint { fill: #98A1B0; }
+        .hair  { fill: #E4E9F1; }
+      }
+    </style>
+  </defs>
+
+  <rect class="bg" width="660" height="276" rx="14"/>
+
+  <g font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="13">
+    <!-- the one that matters -->
+    <rect class="row" x="16" y="16" width="628" height="40" rx="10"/>
+    <rect class="coral" x="24" y="26" width="3" height="20" rx="1.5"/>
+    <circle cx="56" cy="36" r="17" fill="url(#sglow)"/>
+    <circle class="coral" cx="56" cy="36" r="6.5"/>
+    <text x="82" y="41" font-size="14" class="lit">needs you</text>
+    <text x="204" y="41" class="dim">卡在等你确认 —— 全场只有它会发光</text>
+
+    <circle class="amber" cx="52" cy="84" r="6"/>
+    <text x="78" y="89" class="ink">working</text>
+    <text x="200" y="89" class="faint">正在输出，别管它</text>
+    <rect class="hair" x="16" y="106" width="628" height="1"/>
+
+    <circle class="mint" cx="52" cy="126" r="6"/>
+    <text x="78" y="131" class="ink">done</text>
+    <text x="200" y="131" class="faint">跑完了，可以收结果</text>
+    <rect class="hair" x="16" y="148" width="628" height="1"/>
+
+    <circle class="crimson" cx="52" cy="168" r="6"/>
+    <text x="78" y="173" class="ink">error</text>
+    <text x="200" y="173" class="faint">炸了，需要人介入</text>
+    <rect class="hair" x="16" y="190" width="628" height="1"/>
+
+    <circle class="slate" cx="52" cy="210" r="6"/>
+    <text x="78" y="215" class="ink">idle</text>
+    <text x="200" y="215" class="faint">活着但没动静</text>
+    <rect class="hair" x="16" y="232" width="628" height="1"/>
+
+    <circle class="sky" cx="52" cy="252" r="6"/>
+    <text x="78" y="257" class="ink">exited</text>
+    <text x="200" y="257" class="faint">进程退了，历史里还能捞回来</text>
+  </g>
+</svg>

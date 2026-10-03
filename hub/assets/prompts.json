@@ -1,0 +1,36 @@
+{
+  "_note": "gpt-image-2 出图提示词。style 是公共前缀，会和每个 item 的 prompt 拼在一起。生成：python tools/gen_assets.py",
+  "style": "Flat-vector UI illustration. Art direction: 'a quiet machine room at night' — a dark charcoal field #0B0E13 with panel #12171F, 1px hairline separates #232B36, off-white text #E8EBF0, muted grey #8A93A3. Exactly ONE element in the whole image is allowed to glow, and it glows coral #FF6B4A; everything else is desaturated grey-blue. Sacred rule: one lit light per image, never a rainbow of lights. Crisp geometry, generous negative space, no gradients that smear, no drop shadows, no 3D bevels, no lens flare, no photorealism, no human figures, no letters and no words of any kind (any text is replaced by abstract rounded placeholder bars). Typeface feel: geometric sans for headings, monospace for data. High contrast, still readable when scaled to 25%.",
+  "items": [
+    {
+      "name": "hero-banner",
+      "ratio": "16:9",
+      "desc": "README 顶部主视觉",
+      "prompt": "A wide hero banner for an open-source developer tool. LEFT: a nameplate arrangement — a small rounded dark square plate containing three horizontal slot bars stacked evenly, the top bar brighter than the others, each bar ending in a dot at its right; only the top dot is lit coral with a soft radial halo, the lower two are dim slate grey. Under the plate, two lines of abstract rounded placeholder bars of decreasing width (a long bar and a short bar) standing in for a wordmark. RIGHT: a single dark handheld pager device seen face-on, rounded corners, containing an inset screen. Inside the screen: one row where a coral dot glows and two short placeholder bars sit beside it, then a hairline, then two more rows with dim grey dots and grey placeholder bars. At the bottom of the screen, two tiny grey placeholder bars. The device body is flat charcoal with one hairline edge. Nothing else in the image is lit. Background flat charcoal, no grid, no decoration."
+    },
+    {
+      "name": "social-card",
+      "ratio": "16:9",
+      "desc": "GitHub 仓库 social preview（OG 图）",
+      "prompt": "A wide social preview card, centre-aligned and minimal. In the upper third, a rounded dark square plate holding three horizontal slot bars stacked evenly; each bar ends in a dot, and only the TOP dot is lit coral with a soft radial halo while the other two are dim slate grey. Below the plate, three centred horizontal placeholder bars of decreasing width in off-white and grey tones, standing in for a two-line wordmark plus a tagline — absolutely no letters. A thin hairline separator sits between the second and third bars. Flat charcoal background, nothing else in frame, nothing else lit."
+    },
+    {
+      "name": "app-icon",
+      "ratio": "1:1",
+      "desc": "应用图标 / 仓库头像",
+      "prompt": "A single app icon, square, filling the frame. A rounded-square plate with a subtle vertical gradient from slate #1B2230 at the top to near-black #0B0E13 at the bottom, with a faint 1px lighter edge. Centred in the plate: one large coral #FF6B4A circle with a soft radial halo around it, and directly beneath it one short horizontal rounded bar in muted slate grey. Nothing else in the image. Strong silhouette, fully readable at 32 pixels, no text, no other lights, no decoration."
+    },
+    {
+      "name": "center-screen",
+      "ratio": "4:3",
+      "desc": "产品界面示意图（呼机屏幕）",
+      "prompt": "A close-up mockup of a dark handheld pager screen, filling the frame. An inset rounded rectangle in near-black #0E1218 with a 1px darker border. Inside, top to bottom: a row where a coral dot glows brightly at the left and a medium-length off-white placeholder bar sits beside it, with a shorter grey placeholder bar right-aligned; then a hairline; then two more rows, each with a small dim grey dot at the left and two grey placeholder bars of different lengths; then a hairline; then a bottom strip with one tiny grey placeholder bar at the left and one tiny coral placeholder bar right-aligned. Only that first dot is lit. Flat, precise, no letters, no numbers."
+    },
+    {
+      "name": "status-lights",
+      "ratio": "16:9",
+      "desc": "状态灯图例（文档配图）",
+      "prompt": "A legend illustration of six status lights on a flat charcoal field, arranged as six evenly stacked rows. Each row is a small glowing dot on the left paired with two short abstract placeholder bars beside it (a wider one and a narrower one), like a legend entry with text removed. Dot colours top to bottom: coral, amber, mint green, crimson red, slate grey, sky blue. The TOP row is emphasised — its dot is noticeably larger with a soft radial halo, its placeholder bars are brighter, and it sits on a subtly lighter rounded row panel with a short coral marker pinned to its left edge. The other five rows are smaller, flatter, and quieter. Minimal, diagrammatic, no letters."
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-label="Grok Build Center icon">
+  <title>Grok Build Center app icon</title>
+  <defs>
+    <linearGradient id="plate" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%"   stop-color="#1B2230"/>
+      <stop offset="100%" stop-color="#0B0E13"/>
+    </linearGradient>
+    <radialGradient id="glow">
+      <stop offset="0%"   stop-color="#FF6B4A" stop-opacity="0.62"/>
+      <stop offset="55%"  stop-color="#FF6B4A" stop-opacity="0.18"/>
+      <stop offset="100%" stop-color="#FF6B4A" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect x="8" y="8" width="240" height="240" rx="56" fill="url(#plate)"/>
+  <rect x="9" y="9" width="238" height="238" rx="55" fill="none" stroke="#2C3546" stroke-width="2"/>
+
+  <!-- the one light that matters -->
+  <circle cx="128" cy="112" r="76" fill="url(#glow)"/>
+  <circle cx="128" cy="112" r="32" fill="#FF6B4A"/>
+
+  <!-- its slot -->
+  <rect x="76" y="176" width="104" height="20" rx="10" fill="#4A5568"/>
+</svg>

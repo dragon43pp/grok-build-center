@@ -1,0 +1,53 @@
+{
+  "_说明": "复制成 config.json 再填；或者直接跑 `python tools/setup.py` 让向导帮你填。",
+  "_别提交": "config.json 里有密钥，别提交到 git（.gitignore 已经排除了）。",
+
+  "app_id": "cli_xxxxxxxxxxxxxxxx",
+  "app_secret": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+
+  "_receive_id": "面板发给谁。自己用填 open_id；想发到群里填 chat_id 并把 receive_id_type 改成 chat_id。",
+  "_怎么拿": "跑 `python tools/setup.py --receive-id-only`，给机器人发条消息，脚本自己接住。",
+  "receive_id": "",
+  "receive_id_type": "open_id",
+
+  "_domain": "国内飞书留默认；Lark（海外版）填 https://open.larksuite.com",
+  "domain": "https://open.feishu.cn",
+
+  "_refresh_secs": "多久刷新一次面板和多维表格。一次全量重扫约 5 秒，别设太小。",
+  "refresh_secs": 60,
+
+  "_hook_port": "本机 hook 接收端口。CLI 的 hook 往 http://127.0.0.1:8799/hook 上报。",
+  "hook_port": 8799,
+
+  "_push_on_needs_you": "有会话在等人确认时，是否主动推一条消息（而不只是更新面板）。",
+  "push_on_needs_you": true,
+
+  "_bitable": "多维表格。卡片一页只有 10 条，343 场要翻 35 页；Base 才是「看全部」的地方。",
+  "_bitable_怎么拿": "`python tools/setup.py --bitable-only` 会自动建一个并把下面两个值填好。",
+  "bitable_sync": true,
+  "bitable_app_token": "",
+  "bitable_table_id": "",
+  "bitable_table_name": "AI 会话",
+
+  "_remote": "远程续跑：在飞书里点「详情」，看会话正文，再发一句话让本机无头续跑那一场，结果回传飞书。",
+  "_remote_auto_approve": "**默认 false 是对的**。改成 true 等于让飞书那头能在你的机器上自动批准工具执行（改文件、跑命令）。想清楚再开。",
+  "_remote_timeout": "单轮最长等待秒数。agent 跑一轮可能好几分钟，给足但要封顶。",
+  "remote_ask": true,
+  "remote_auto_approve": false,
+  "remote_timeout": 900,
+
+  "_feed": "外部事件流通道（可选，**默认全关**）。本仓库刻意不写死任何路径 —— 读什么完全由下面几个键决定，不填就整段空转，一次系统调用都不发。",
+  "_feed_说明": "它能给出「等你确认」：对端自己本来就在记「哪场卡住了」，所以它拉起的会话**不用配任何 CLI hook** 也有橙色。没有这个对端就保持关闭，面板照常工作。",
+  "_feed_events": "对端写的 append-only 事件流水（一行一个 JSON）。空 = 不接。",
+  "_feed_pipe": "可选的控制管道路径，用来做反向操作（批准 / 拒绝 / 回答 / 投喂）。空 = 不做反向操作。对端可能只放行部分 adapter 的会话，拿不到别的不是 bug。",
+  "_feed_token": "控制管道的 token 文件（内容为 64 位 hex）。",
+  "_feed_approve": "**默认 false 是对的**。开着 = 手机上点一下就让本机继续执行工具，跟 remote_auto_approve 是同一类信任问题。",
+  "_feed_poll_secs": "事件流水是增量读（几毫秒），5 秒一轮毫无压力。别设太大 —— 「卡在等你批准」晚一分钟才知道就没用了。",
+  "feed_enabled": false,
+  "feed_events": "",
+  "feed_pipe": "",
+  "feed_token": "",
+  "feed_control": true,
+  "feed_approve": false,
+  "feed_poll_secs": 5
+}
